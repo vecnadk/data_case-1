@@ -1516,4 +1516,9 @@ function hide(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = 'none';
 }
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
