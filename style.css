@@ -1,0 +1,1850 @@
+<!-- Подключение шрифтов -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<section class="tb-game-wrapper" id="tb-game-root">
+
+  <!-- ========================================== -->
+  <!-- ЭКРАН 1: БРИФИНГ -->
+  <!-- ========================================== -->
+  <div class="tb-briefing-screen" id="briefing-screen">
+    <div class="tb-briefing-container">
+      <a href="/cases" class="tb-briefing-back">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M15 10H5M5 10L10 5M5 10L10 15" stroke="#333333" stroke-width="2" stroke-linecap="square"/></svg>
+        К БИБЛИОТЕКЕ КЕЙСОВ
+      </a>
+
+      <div class="tb-briefing-header">
+        <h1 class="tb-briefing-title" id="b-title">Загрузка кейса...</h1>
+        <div class="tb-briefing-badges">
+          <span class="tb-badge" id="b-industry">ИНДУСТРИЯ</span>
+          <span class="tb-badge tb-badge-warning" id="b-difficulty">СЛОЖНОСТЬ</span>
+        </div>
+      </div>
+
+      <div class="tb-briefing-grid">
+        <div class="tb-briefing-col">
+          <h3 class="tb-briefing-subtitle">КОНТЕКСТ ДЕЛА</h3>
+          <p class="tb-briefing-text" id="b-context">...</p>
+
+          <h3 class="tb-briefing-subtitle" style="margin-top: 24px;">ЦЕЛИ РАССЛЕДОВАНИЯ</h3>
+          <ul class="tb-briefing-list" id="b-objectives"></ul>
+        </div>
+
+        <div class="tb-briefing-col">
+          <h3 class="tb-briefing-subtitle">ДОСТУПНЫЕ РЕСУРСЫ</h3>
+          <div class="tb-resources-grid" id="b-resources"></div>
+
+          <h3 class="tb-briefing-subtitle" style="margin-top: 24px;">НАЧАЛЬНЫЕ СИГНАЛЫ</h3>
+          <div class="tb-alerts-list" id="b-alerts"></div>
+        </div>
+      </div>
+
+      <div class="tb-briefing-footer">
+        <button class="tb-btn-primary" onclick="startGame()">НАЧАТЬ РАССЛЕДОВАНИЕ</button>
+        <p class="tb-hint">
+          Таймер запустится автоматически. Доступно ограниченное число официальных запросов.
+          Запросы могут отклоняться, если у вас недостаточно основания.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ЭКРАН 2: РАБОЧАЯ ОБЛАСТЬ -->
+  <!-- ========================================== -->
+  <div class="tb-workspace-screen" id="workspace-screen" style="display: none;">
+
+    <header class="tb-top-bar">
+      <button class="tb-mobile-menu-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+
+      <div class="tb-top-bar-title">
+        <h2 id="w-title">КЕЙС</h2>
+        <span class="tb-phase-badge" id="w-phase">СБОР ИНФОРМАЦИИ</span>
+      </div>
+
+      <div class="tb-top-bar-controls">
+        <div class="tb-top-resource" id="w-request-budget">Запросов: 6</div>
+        <div class="tb-timer" id="w-timer">00:00:00</div>
+
+        <button class="tb-btn-secondary" onclick="togglePause()" id="btn-pause">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+          ПАУЗА
+        </button>
+
+        <button class="tb-btn-danger" onclick="openReportModal()">ЗАВЕРШИТЬ</button>
+      </div>
+    </header>
+
+    <div class="tb-workspace-layout">
+
+      <!-- ЛЕВОЕ МЕНЮ -->
+      <aside class="tb-sidebar" id="sidebar">
+        <div class="tb-sidebar-group">
+          <div class="tb-sidebar-group-title">МАТЕРИАЛЫ ДЕЛА</div>
+
+          <button class="tb-nav-btn active" data-section="overview">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="6" height="6" stroke="currentColor" stroke-width="2"/><rect x="11" y="3" width="6" height="6" stroke="currentColor" stroke-width="2"/><rect x="3" y="11" width="6" height="6" stroke="currentColor" stroke-width="2"/><rect x="11" y="11" width="6" height="6" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Обзор дела</span>
+          </button>
+
+          <button class="tb-nav-btn" data-section="documents">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="4" y="3" width="12" height="14" rx="1" stroke="currentColor" stroke-width="2"/><line x1="7" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="2"/><line x1="7" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Документы</span>
+            <span class="tb-nav-counter" id="c-docs">0</span>
+          </button>
+
+          <button class="tb-nav-btn" data-section="transactions">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="14" width="4" height="3" fill="currentColor"/><rect x="8" y="10" width="4" height="7" fill="currentColor"/><rect x="13" y="6" width="4" height="11" fill="currentColor"/></svg>
+            <span>Транзакции</span>
+            <span class="tb-nav-counter" id="c-trans">0</span>
+          </button>
+
+          <button class="tb-nav-btn" data-section="graph">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="6" cy="6" r="3" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="6" r="3" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="14" r="3" stroke="currentColor" stroke-width="2"/><line x1="8" y1="8" x2="9" y2="12" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="11" y2="12" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Граф связей</span>
+          </button>
+        </div>
+
+        <div class="tb-sidebar-group">
+          <div class="tb-sidebar-group-title">ВЗАИМОДЕЙСТВИЕ</div>
+
+          <button class="tb-nav-btn" data-section="requests">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 8H17M17 8L12 3M17 8L12 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="14" width="14" height="3" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Запросы</span>
+            <span class="tb-nav-counter" id="c-req">0/6</span>
+          </button>
+        </div>
+
+        <div class="tb-sidebar-group">
+          <div class="tb-sidebar-group-title">АНАЛИТИКА</div>
+
+          <button class="tb-nav-btn" data-section="hypotheses">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/><line x1="10" y1="7" x2="10" y2="13" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="15" r="1" fill="currentColor"/></svg>
+            <span>Гипотезы</span>
+            <span class="tb-nav-counter" id="c-hyp">0</span>
+          </button>
+
+          <button class="tb-nav-btn" data-section="evidence">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3L3 7V11C3 15.4 6 19.2 10 20C14 19.2 17 15.4 17 11V7L10 3Z" stroke="currentColor" stroke-width="2"/><path d="M7 10L9 12L13 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>Доказательства</span>
+            <span class="tb-nav-counter" id="c-ev">0</span>
+          </button>
+
+          <button class="tb-nav-btn" data-section="interviews">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="2"/><path d="M5 17C5 14.2 7.2 12 10 12C12.8 12 15 14.2 15 17" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Интервью</span>
+            <span class="tb-nav-counter" id="c-int">0/3</span>
+          </button>
+        </div>
+
+        <div class="tb-sidebar-group">
+          <div class="tb-sidebar-group-title">РЕЗУЛЬТАТ</div>
+
+          <button class="tb-nav-btn" data-section="controls">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="6" height="6" stroke="currentColor" stroke-width="2"/><rect x="11" y="3" width="6" height="6" stroke="currentColor" stroke-width="2"/><rect x="3" y="11" width="6" height="6" stroke="currentColor" stroke-width="2"/><rect x="11" y="11" width="6" height="6" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Контроли</span>
+          </button>
+
+          <button class="tb-nav-btn" data-section="report">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="4" y="3" width="12" height="14" rx="1" stroke="currentColor" stroke-width="2"/><line x1="7" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="2"/><line x1="7" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Финальный отчет</span>
+          </button>
+        </div>
+
+        <div class="tb-sidebar-progress">
+          <div class="tb-progress-header">
+            <span>ПРОГРЕСС</span>
+            <span id="progress-text">0%</span>
+          </div>
+          <div class="tb-progress-track">
+            <div class="tb-progress-fill" id="progress-bar" style="width: 0%"></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ЦЕНТРАЛЬНАЯ ОБЛАСТЬ -->
+      <main class="tb-main-content">
+
+        <!-- ОБЗОР -->
+        <div class="tb-section active" id="sec-overview">
+          <div class="tb-section-header">
+            <h2>ПАНЕЛЬ УПРАВЛЕНИЯ РАССЛЕДОВАНИЕМ</h2>
+            <p>Ключевые метрики, аномалии и направление проверки</p>
+          </div>
+
+          <div class="tb-metrics-grid" id="render-metrics"></div>
+
+          <div class="tb-overview-split">
+            <div class="tb-card">
+              <h3>СУТЬ АНОМАЛИИ</h3>
+              <p id="render-context-short" class="tb-text-muted"></p>
+            </div>
+
+            <div class="tb-card tb-card-warning">
+              <h3>ТРЕБУЕТ ВНИМАНИЯ</h3>
+              <ul class="tb-check-list" id="render-alerts-short"></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- ДОКУМЕНТЫ -->
+        <div class="tb-section" id="sec-documents">
+          <div class="tb-section-header">
+            <h2>ДОКУМЕНТАЛЬНАЯ БАЗА</h2>
+            <p>Не все документы доступны изначально. Часть открывается через официальные запросы.</p>
+          </div>
+
+          <div class="tb-docs-toolbar">
+            <input type="text" class="tb-input" id="doc-search" placeholder="Поиск по названию, типу, контрагенту, номеру...">
+            <select class="tb-select" id="doc-filter">
+              <option value="all">Все документы</option>
+              <option value="available">Доступные</option>
+              <option value="hidden">Скрытые / запрошенные</option>
+            </select>
+          </div>
+
+          <div class="tb-docs-grid" id="render-docs"></div>
+        </div>
+
+        <!-- ТРАНЗАКЦИИ -->
+        <div class="tb-section" id="sec-transactions">
+          <div class="tb-section-header">
+            <h2>ЖУРНАЛ ПЛАТЕЖЕЙ И РАСЧЕТОВ</h2>
+            <p>Большой массив данных. Ищите повторяющиеся реквизиты, аномальные сроки, одинаковые контейнеры и платежи без приемки.</p>
+          </div>
+
+          <div class="tb-table-controls">
+            <input type="text" class="tb-input" id="txn-search" placeholder="Поиск по получателю, счету, сумме, комментарию...">
+            <select class="tb-select" id="txn-filter">
+              <option value="all">Все операции</option>
+              <option value="vendor">Транс-Север Логистик</option>
+              <option value="large">Суммы от 10 млн ₽</option>
+              <option value="fast">Оплачено за 1–3 дня</option>
+              <option value="no_grn">Без подтвержденной приемки</option>
+            </select>
+          </div>
+
+          <div class="tb-table-wrapper" id="render-transactions"></div>
+        </div>
+
+        <!-- ГРАФ -->
+        <div class="tb-section" id="sec-graph">
+          <div class="tb-section-header">
+            <h2>ГРАФ СВЯЗЕЙ</h2>
+            <p>Схема формируется по мере сбора доказательств и ответов на запросы</p>
+          </div>
+
+          <div class="tb-graph-container" id="render-graph"></div>
+        </div>
+
+        <!-- ЗАПРОСЫ -->
+        <div class="tb-section" id="sec-requests">
+          <div class="tb-section-header">
+            <h2>ОФИЦИАЛЬНЫЕ ЗАПРОСЫ</h2>
+            <p>Запросы открывают скрытые данные, но могут отклоняться. Каждый запрос тратит время и лимит обращения.</p>
+          </div>
+
+          <div class="tb-request-summary">
+            <div class="tb-request-summary-item">
+              <span>Использовано запросов</span>
+              <strong id="req-used">0</strong>
+            </div>
+            <div class="tb-request-summary-item">
+              <span>Осталось</span>
+              <strong id="req-left">6</strong>
+            </div>
+            <div class="tb-request-summary-item">
+              <span>Одобрено</span>
+              <strong id="req-approved">0</strong>
+            </div>
+            <div class="tb-request-summary-item">
+              <span>Отклонено</span>
+              <strong id="req-rejected">0</strong>
+            </div>
+          </div>
+
+          <div class="tb-requests-board" id="render-requests"></div>
+
+          <div class="tb-request-history">
+            <h3>ЖУРНАЛ ЗАПРОСОВ</h3>
+            <div id="request-log" class="tb-request-log"></div>
+          </div>
+        </div>
+
+        <!-- ИНТЕРВЬЮ -->
+        <div class="tb-section" id="sec-interviews">
+          <div class="tb-section-header">
+            <h2>ИНТЕРВЬЮ</h2>
+            <p>Доступно 3 интервью. Некоторые вопросы откроются только после получения ответов на запросы.</p>
+          </div>
+
+          <div class="tb-interviews-grid" id="render-interviews"></div>
+        </div>
+
+        <!-- ГИПОТЕЗЫ -->
+        <div class="tb-section" id="sec-hypotheses">
+          <div class="tb-section-header">
+            <h2>РАБОЧИЕ ГИПОТЕЗЫ</h2>
+            <p>Выберите версию и соберите достаточный вес доказательств. Система будет искать альтернативные объяснения.</p>
+          </div>
+
+          <div class="tb-hypotheses-list" id="render-hypotheses"></div>
+          <div class="tb-devils-advocate" id="render-devils-advocate"></div>
+        </div>
+
+        <!-- ДОКАЗАТЕЛЬСТВА -->
+        <div class="tb-section" id="sec-evidence">
+          <div class="tb-section-header">
+            <h2>ДОСКА ДОКАЗАТЕЛЬСТВ</h2>
+            <p>Все собранные улики, их источник, надежность и вес</p>
+          </div>
+
+          <div class="tb-evidence-board" id="render-evidence"></div>
+        </div>
+
+        <!-- КОНТРОЛИ -->
+        <div class="tb-section" id="sec-controls">
+          <div class="tb-section-header">
+            <h2>ПРОЕКТИРОВАНИЕ КОНТРОЛЕЙ</h2>
+            <p>Выберите меры, которые предотвратят повторение схемы. Часть решений будет несоразмерной или опасной.</p>
+          </div>
+
+          <div class="tb-controls-list" id="render-controls"></div>
+        </div>
+
+        <!-- ОТЧЕТ -->
+        <div class="tb-section" id="sec-report">
+          <div class="tb-section-header">
+            <h2>ФИНАЛЬНЫЙ ОТЧЕТ</h2>
+            <p>Сформулируйте вывод и подведите итоги расследования</p>
+          </div>
+
+          <div class="tb-report-box">
+            <h3>ВЫВОД АУДИТОРА</h3>
+
+            <label class="tb-radio-option">
+              <input type="radio" name="conclusion" value="fraud">
+              <span>Доказать схему фантомной логистики и эскалировать в службу безопасности / комплаенс</span>
+            </label>
+
+            <label class="tb-radio-option">
+              <input type="radio" name="conclusion" value="error">
+              <span>Оформить как ошибку учета, дублирование документов или сбой процесса</span>
+            </label>
+
+            <label class="tb-radio-option">
+              <input type="radio" name="conclusion" value="insufficient">
+              <span>Признать недостаточность доказательств и запросить дополнительные процедуры</span>
+            </label>
+
+            <button class="tb-btn-primary" onclick="submitFinalReport()">ПОДВЕСТИ ИТОГИ</button>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО -->
+  <div class="tb-modal-overlay" id="modal-overlay">
+    <div class="tb-modal" id="modal-box">
+      <button class="tb-modal-close" onclick="closeModal()">×</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- ТОСТ -->
+  <div class="tb-toast" id="toast"></div>
+
+</section>
+
+<style>
+/* ========================================= */
+/* БАЗА */
+/* ========================================= */
+.tb-game-wrapper{
+  font-family:'Inter',sans-serif;
+  background:#F5F5F5;
+  color:#333;
+  min-height:100vh;
+  line-height:1.5;
+}
+.tb-game-wrapper *,
+.tb-game-wrapper *::before,
+.tb-game-wrapper *::after{
+  box-sizing:border-box;
+}
+
+/* Кнопки */
+.tb-btn-primary{
+  background:#FFDD2D;
+  color:#000;
+  border:2px solid #000;
+  padding:14px 28px;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:18px;
+  letter-spacing:1px;
+  border-radius:4px;
+  cursor:pointer;
+  transition:all .2s;
+  box-shadow:4px 4px 0 #000;
+}
+.tb-btn-primary:hover{
+  transform:translate(-2px,-2px);
+  box-shadow:6px 6px 0 #000;
+  background:#FFE961;
+}
+.tb-btn-secondary{
+  background:#FFF;
+  color:#333;
+  border:2px solid #E0E0E0;
+  padding:10px 20px;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:16px;
+  border-radius:4px;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+.tb-btn-secondary:hover{
+  border-color:#FFDD2D;
+  background:#FFFBEB;
+}
+.tb-btn-danger{
+  background:#FFF5F5;
+  color:#FF3B30;
+  border:2px solid #FF3B30;
+  padding:10px 20px;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:16px;
+  border-radius:4px;
+  cursor:pointer;
+}
+.tb-btn-danger:hover{
+  background:#FF3B30;
+  color:#FFF;
+}
+.tb-btn-mini{
+  background:#F5F5F5;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:6px 10px;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:14px;
+  letter-spacing:.5px;
+  cursor:pointer;
+}
+.tb-btn-mini:hover{
+  background:#FFDD2D;
+  border-color:#000;
+}
+.tb-btn-mini:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+/* ========================================= */
+/* БРИФИНГ */
+/* ========================================= */
+.tb-briefing-screen{
+  padding:40px 20px;
+  max-width:1000px;
+  margin:0 auto;
+}
+.tb-briefing-container{
+  background:#FFF;
+  border-radius:4px;
+  padding:40px;
+  border:2px solid #E0E0E0;
+}
+.tb-briefing-back{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:16px;
+  color:#666;
+  text-decoration:none;
+  margin-bottom:24px;
+}
+.tb-briefing-back:hover{color:#FFDD2D;}
+.tb-briefing-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:32px;
+  flex-wrap:wrap;
+  gap:16px;
+}
+.tb-briefing-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:48px;
+  margin:0;
+  line-height:1;
+}
+.tb-briefing-badges{display:flex;gap:8px;}
+.tb-badge{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:14px;
+  padding:6px 12px;
+  border-radius:2px;
+  background:#F5F5F5;
+  color:#666;
+  letter-spacing:1px;
+}
+.tb-badge-warning{
+  background:#FFF3E0;
+  color:#E65100;
+}
+.tb-briefing-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:40px;
+}
+.tb-briefing-subtitle{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:20px;
+  margin:0 0 12px 0;
+  color:#000;
+  letter-spacing:.5px;
+}
+.tb-briefing-text{
+  font-size:15px;
+  color:#555;
+  line-height:1.6;
+}
+.tb-briefing-list{
+  list-style:none;
+  padding:0;
+  margin:0;
+}
+.tb-briefing-list li{
+  display:flex;
+  gap:10px;
+  font-size:14px;
+  color:#333;
+  margin-bottom:8px;
+}
+.tb-briefing-list li::before{
+  content:'';
+  flex-shrink:0;
+  width:6px;
+  height:6px;
+  background:#FFDD2D;
+  margin-top:7px;
+}
+.tb-resources-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+  margin-bottom:24px;
+}
+.tb-resource-box{
+  background:#F5F5F5;
+  padding:16px;
+  border-radius:4px;
+  text-align:center;
+}
+.tb-resource-val{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:24px;
+  color:#000;
+}
+.tb-resource-lbl{
+  font-size:12px;
+  color:#888;
+}
+.tb-alerts-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.tb-alert-item{
+  display:flex;
+  gap:12px;
+  padding:12px;
+  background:#FFF9E6;
+  border-left:3px solid #FF9500;
+  border-radius:2px;
+  font-size:14px;
+  color:#333;
+}
+.tb-briefing-footer{
+  margin-top:40px;
+  text-align:center;
+  border-top:2px solid #F5F5F5;
+  padding-top:32px;
+}
+.tb-hint{
+  font-size:13px;
+  color:#888;
+  margin-top:16px;
+}
+
+/* ========================================= */
+/* РАБОЧАЯ ОБЛАСТЬ */
+/* ========================================= */
+.tb-workspace-screen{
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
+.tb-top-bar{
+  background:#1A1A1A;
+  color:#FFF;
+  padding:12px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:3px solid #FFDD2D;
+  flex-shrink:0;
+}
+.tb-mobile-menu-toggle{
+  display:none;
+  background:none;
+  border:none;
+  color:#FFF;
+  cursor:pointer;
+  padding:4px;
+}
+.tb-top-bar-title{
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
+.tb-top-bar-title h2{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:24px;
+  margin:0;
+  letter-spacing:1px;
+}
+.tb-phase-badge{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:14px;
+  background:#333;
+  color:#FFDD2D;
+  padding:4px 12px;
+  border-radius:2px;
+  letter-spacing:1px;
+}
+.tb-top-bar-controls{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  flex-wrap:wrap;
+}
+.tb-top-resource{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:16px;
+  color:#FFF;
+  background:#333;
+  border:2px solid #444;
+  padding:6px 12px;
+  border-radius:4px;
+  letter-spacing:1px;
+}
+.tb-timer{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:24px;
+  color:#FFDD2D;
+  letter-spacing:1px;
+}
+.tb-workspace-layout{
+  display:flex;
+  flex:1;
+  overflow:hidden;
+}
+
+/* Sidebar */
+.tb-sidebar{
+  width:260px;
+  background:#FFF;
+  border-right:2px solid #E0E0E0;
+  display:flex;
+  flex-direction:column;
+  overflow-y:auto;
+  flex-shrink:0;
+  transition:transform .3s ease;
+}
+.tb-sidebar-group{
+  padding:16px;
+  border-bottom:2px solid #F5F5F5;
+}
+.tb-sidebar-group-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:12px;
+  color:#888;
+  letter-spacing:1.5px;
+  margin-bottom:12px;
+}
+.tb-nav-btn{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  padding:10px 12px;
+  background:transparent;
+  border:2px solid transparent;
+  border-radius:4px;
+  color:#666;
+  font-family:'Inter',sans-serif;
+  font-size:14px;
+  font-weight:500;
+  cursor:pointer;
+  text-align:left;
+  transition:all .2s;
+  margin-bottom:4px;
+}
+.tb-nav-btn:hover{
+  background:#F5F5F5;
+  color:#000;
+}
+.tb-nav-btn.active{
+  background:#FFDD2D;
+  border-color:#000;
+  color:#000;
+  font-weight:600;
+}
+.tb-nav-counter{
+  margin-left:auto;
+  background:#E0E0E0;
+  color:#333;
+  font-size:12px;
+  font-weight:700;
+  padding:2px 8px;
+  border-radius:10px;
+}
+.tb-nav-btn.active .tb-nav-counter{
+  background:#000;
+  color:#FFDD2D;
+}
+.tb-sidebar-progress{
+  margin-top:auto;
+  padding:20px 16px;
+  border-top:2px solid #E0E0E0;
+  background:#FAFAFA;
+}
+.tb-progress-header{
+  display:flex;
+  justify-content:space-between;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:14px;
+  color:#666;
+  margin-bottom:8px;
+}
+.tb-progress-track{
+  height:8px;
+  background:#E0E0E0;
+  border-radius:4px;
+  overflow:hidden;
+}
+.tb-progress-fill{
+  height:100%;
+  background:#FFDD2D;
+  transition:width .4s ease;
+}
+
+/* Main */
+.tb-main-content{
+  flex:1;
+  overflow-y:auto;
+  padding:32px;
+  background:#F5F5F5;
+}
+.tb-section{
+  display:none;
+  animation:tbFadeIn .3s ease;
+}
+.tb-section.active{
+  display:block;
+}
+@keyframes tbFadeIn{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.tb-section-header{
+  margin-bottom:24px;
+}
+.tb-section-header h2{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:32px;
+  margin:0 0 4px 0;
+  color:#000;
+}
+.tb-section-header p{
+  font-size:14px;
+  color:#888;
+  margin:0;
+}
+
+/* Overview */
+.tb-metrics-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:16px;
+  margin-bottom:24px;
+}
+.tb-metric-card{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:20px;
+}
+.tb-metric-card.warning{
+  border-color:#FF9500;
+  background:#FFF9E6;
+}
+.tb-metric-card.danger{
+  border-color:#FF3B30;
+  background:#FFF5F5;
+}
+.tb-metric-card h4{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:14px;
+  color:#888;
+  margin:0 0 8px 0;
+  letter-spacing:.5px;
+}
+.tb-metric-val{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:36px;
+  color:#000;
+  line-height:1;
+}
+.tb-metric-lbl{
+  font-size:12px;
+  color:#888;
+  margin-top:4px;
+}
+.tb-overview-split{
+  display:grid;
+  grid-template-columns:2fr 1fr;
+  gap:24px;
+}
+.tb-card{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:24px;
+}
+.tb-card h3{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:20px;
+  margin:0 0 12px 0;
+}
+.tb-text-muted{
+  color:#666;
+  font-size:14px;
+  line-height:1.6;
+}
+.tb-card-warning{
+  border-color:#FF9500;
+  background:#FFF9E6;
+}
+.tb-check-list{
+  list-style:none;
+  padding:0;
+  margin:0;
+}
+.tb-check-list li{
+  display:flex;
+  gap:8px;
+  font-size:14px;
+  color:#333;
+  margin-bottom:8px;
+}
+.tb-check-list li::before{
+  content:'!';
+  color:#FF9500;
+  font-weight:700;
+}
+
+/* Documents */
+.tb-docs-toolbar{
+  display:flex;
+  gap:12px;
+  margin-bottom:16px;
+}
+.tb-docs-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:16px;
+}
+.tb-doc-card{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:20px;
+  cursor:pointer;
+  transition:all .2s;
+}
+.tb-doc-card:hover{
+  border-color:#FFDD2D;
+  transform:translateY(-2px);
+  box-shadow:0 4px 12px rgba(0,0,0,.05);
+}
+.tb-doc-card.locked{
+  opacity:.65;
+  cursor:not-allowed;
+  background:#FAFAFA;
+}
+.tb-doc-card.locked:hover{
+  transform:none;
+  border-color:#E0E0E0;
+  box-shadow:none;
+}
+.tb-doc-type{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:12px;
+  color:#888;
+  letter-spacing:1px;
+  margin-bottom:8px;
+}
+.tb-doc-name{
+  font-weight:600;
+  font-size:16px;
+  color:#000;
+  margin-bottom:4px;
+}
+.tb-doc-meta{
+  font-size:13px;
+  color:#666;
+}
+.tb-doc-status{
+  display:inline-block;
+  margin-top:10px;
+  font-size:11px;
+  font-family:'Bebas Neue',sans-serif;
+  letter-spacing:1px;
+  padding:4px 8px;
+  border-radius:2px;
+  background:#F5F5F5;
+  color:#666;
+}
+.tb-doc-status.available{
+  background:#F5F5F5;
+  color:#666;
+}
+.tb-doc-status.hidden{
+  background:#F3E5F5;
+  color:#7B1FA2;
+}
+.tb-doc-status.requested{
+  background:#E3F2FD;
+  color:#1565C0;
+}
+.tb-doc-status.unlocked{
+  background:#E8F5E9;
+  color:#2E7D32;
+}
+
+/* Tables */
+.tb-table-controls{
+  display:flex;
+  gap:12px;
+  margin-bottom:16px;
+}
+.tb-input,
+.tb-select{
+  padding:10px 14px;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  font-family:'Inter',sans-serif;
+  font-size:14px;
+  background:#FFF;
+}
+.tb-input{
+  flex:1;
+}
+.tb-input:focus,
+.tb-select:focus{
+  outline:none;
+  border-color:#FFDD2D;
+}
+.tb-table-wrapper{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  overflow-x:auto;
+}
+table.tb-data-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+table.tb-data-table th{
+  text-align:left;
+  padding:12px 14px;
+  background:#F5F5F5;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:14px;
+  color:#666;
+  letter-spacing:.5px;
+  border-bottom:2px solid #E0E0E0;
+  white-space:nowrap;
+}
+table.tb-data-table td{
+  padding:10px 14px;
+  border-bottom:1px solid #F0F0F0;
+  color:#333;
+  vertical-align:top;
+}
+table.tb-data-table tr:hover td{
+  background:#FAFAFA;
+}
+table.tb-data-table tr.subtle-flag td{
+  background:#FFFDF2;
+}
+.tb-risk-badge{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:12px;
+  letter-spacing:.5px;
+  padding:4px 8px;
+  border-radius:2px;
+  background:#F5F5F5;
+  color:#666;
+}
+.tb-risk-badge.ok{
+  background:#F5F5F5;
+  color:#666;
+}
+.tb-risk-badge.review{
+  background:#FFF9E6;
+  color:#B26A00;
+}
+.tb-risk-badge.flag{
+  background:#FFF5F5;
+  color:#C62828;
+}
+
+/* Graph */
+.tb-graph-container{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:24px;
+  min-height:360px;
+}
+.tb-graph-svg{
+  width:100%;
+  height:360px;
+}
+.graph-node{
+  fill:#FFF;
+  stroke:#333;
+  stroke-width:2;
+}
+.graph-node.active{
+  fill:#FFDD2D;
+}
+.graph-node.danger{
+  fill:#FFF5F5;
+  stroke:#FF3B30;
+}
+.graph-label{
+  font-family:'Inter',sans-serif;
+  font-size:11px;
+  fill:#333;
+  text-anchor:middle;
+}
+.graph-edge{
+  stroke:#E0E0E0;
+  stroke-width:2;
+}
+.graph-edge.active{
+  stroke:#FF3B30;
+  stroke-width:3;
+}
+
+/* Requests */
+.tb-request-summary{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+  margin-bottom:24px;
+}
+.tb-request-summary-item{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.tb-request-summary-item span{
+  font-size:12px;
+  color:#888;
+}
+.tb-request-summary-item strong{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:28px;
+  color:#000;
+  line-height:1;
+}
+.tb-requests-board{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  gap:16px;
+  margin-bottom:24px;
+}
+.tb-request-card{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:20px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.tb-request-card.pending{
+  border-color:#FF9500;
+  background:#FFFDF5;
+}
+.tb-request-card.approved{
+  border-color:#34C759;
+  background:#F8FFF9;
+}
+.tb-request-card.rejected{
+  border-color:#FF3B30;
+  background:#FFF8F8;
+}
+.tb-request-card.locked{
+  opacity:.72;
+  background:#FAFAFA;
+}
+.tb-request-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+}
+.tb-request-title{
+  font-weight:700;
+  font-size:15px;
+  color:#000;
+}
+.tb-request-target{
+  font-size:12px;
+  color:#888;
+}
+.tb-request-status{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:12px;
+  letter-spacing:1px;
+  padding:4px 8px;
+  border-radius:2px;
+  background:#F5F5F5;
+  color:#666;
+  white-space:nowrap;
+}
+.tb-request-status.pending{
+  background:#FFF3E0;
+  color:#E65100;
+}
+.tb-request-status.approved{
+  background:#E8F5E9;
+  color:#2E7D32;
+}
+.tb-request-status.rejected{
+  background:#FFEBEE;
+  color:#C62828;
+}
+.tb-request-status.locked{
+  background:#F5F5F5;
+  color:#888;
+}
+.tb-request-desc{
+  font-size:13px;
+  color:#555;
+  line-height:1.5;
+}
+.tb-request-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  font-size:12px;
+  color:#777;
+}
+.tb-request-meta span{
+  background:#F5F5F5;
+  border-radius:2px;
+  padding:4px 8px;
+}
+.tb-request-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:auto;
+}
+.tb-request-history{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:20px;
+}
+.tb-request-history h3{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:20px;
+  margin:0 0 12px 0;
+}
+.tb-request-log{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  font-size:13px;
+  color:#555;
+}
+.tb-request-log-item{
+  padding:10px 12px;
+  border-left:3px solid #E0E0E0;
+  background:#FAFAFA;
+  border-radius:2px;
+}
+.tb-request-log-item.approved{
+  border-left-color:#34C759;
+  background:#F8FFF9;
+}
+.tb-request-log-item.rejected{
+  border-left-color:#FF3B30;
+  background:#FFF8F8;
+}
+.tb-request-log-item.pending{
+  border-left-color:#FF9500;
+  background:#FFFDF5;
+}
+
+/* Interviews */
+.tb-interviews-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  gap:16px;
+}
+.tb-interview-card{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:20px;
+}
+.tb-interview-card.completed{
+  border-color:#34C759;
+  background:#F6FFF8;
+}
+.tb-interview-top{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-bottom:12px;
+}
+.tb-avatar{
+  width:48px;
+  height:48px;
+  background:#333;
+  color:#FFDD2D;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:20px;
+  border-radius:4px;
+  flex-shrink:0;
+}
+.tb-interview-name{
+  font-weight:600;
+  color:#000;
+}
+.tb-interview-role{
+  font-size:13px;
+  color:#888;
+}
+.tb-interview-desc{
+  font-size:14px;
+  color:#555;
+  margin-bottom:16px;
+}
+
+/* Hypotheses */
+.tb-hypotheses-list{
+  display:grid;
+  gap:16px;
+}
+.tb-hyp-card{
+  border:2px solid #E0E0E0;
+  background:#FFF;
+  border-radius:4px;
+  padding:20px;
+  cursor:pointer;
+  transition:all .2s;
+}
+.tb-hyp-card:hover{
+  border-color:#FFDD2D;
+}
+.tb-hyp-card.selected{
+  border-color:#FFDD2D;
+  background:#FFFBEB;
+}
+.tb-hyp-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:22px;
+  color:#000;
+  margin-bottom:8px;
+}
+.tb-hyp-desc{
+  font-size:14px;
+  color:#666;
+  margin-bottom:12px;
+}
+.tb-checklist{
+  list-style:none;
+  padding:0;
+  margin:0;
+  font-size:13px;
+}
+.tb-checklist li{
+  display:flex;
+  gap:8px;
+  margin-bottom:6px;
+  color:#888;
+}
+.tb-checklist li.done{
+  color:#2E7D32;
+}
+.tb-checklist li.done::before{
+  content:'✓';
+  font-weight:700;
+}
+.tb-checklist li:not(.done)::before{
+  content:'○';
+}
+.tb-confidence{
+  height:8px;
+  background:#E0E0E0;
+  border-radius:4px;
+  margin-top:12px;
+  overflow:hidden;
+}
+.tb-confidence-fill{
+  height:100%;
+  background:#FFDD2D;
+  border-radius:4px;
+  transition:width .3s ease;
+}
+.tb-devils-advocate{
+  margin-top:20px;
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:20px;
+}
+.tb-devils-advocate h3{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:20px;
+  margin:0 0 10px 0;
+}
+.tb-devils-advocate p{
+  font-size:14px;
+  color:#555;
+  margin:0 0 16px 0;
+}
+
+/* Evidence */
+.tb-evidence-board{
+  display:grid;
+  gap:12px;
+}
+.tb-evidence-item{
+  border:2px solid #E0E0E0;
+  border-left:6px solid #FFDD2D;
+  background:#FFF;
+  padding:14px 16px;
+  border-radius:4px;
+}
+.tb-evidence-item.high{
+  border-left-color:#34C759;
+}
+.tb-evidence-item.medium{
+  border-left-color:#FF9500;
+}
+.tb-evidence-item.low{
+  border-left-color:#999;
+}
+.tb-evidence-title{
+  font-weight:600;
+  color:#000;
+  margin-bottom:4px;
+}
+.tb-evidence-meta{
+  font-size:12px;
+  color:#888;
+}
+.tb-remove-btn{
+  float:right;
+  background:none;
+  border:none;
+  color:#FF3B30;
+  cursor:pointer;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:14px;
+  letter-spacing:.5px;
+}
+.tb-empty-state{
+  background:#FFF;
+  border:2px dashed #E0E0E0;
+  border-radius:4px;
+  padding:40px;
+  text-align:center;
+  color:#888;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:18px;
+  letter-spacing:1px;
+}
+
+/* Controls */
+.tb-controls-list{
+  display:grid;
+  gap:10px;
+}
+.tb-control-option{
+  display:flex;
+  gap:12px;
+  padding:14px 16px;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  background:#FFF;
+  align-items:flex-start;
+}
+.tb-control-option input{
+  margin-top:3px;
+  accent-color:#FFDD2D;
+  width:18px;
+  height:18px;
+  flex-shrink:0;
+}
+.tb-control-text strong{
+  display:block;
+  color:#000;
+  font-size:14px;
+  margin-bottom:4px;
+}
+.tb-control-text span{
+  font-size:13px;
+  color:#666;
+}
+
+/* Report */
+.tb-report-box{
+  background:#FFF;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  padding:24px;
+}
+.tb-report-box h3{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:22px;
+  margin:0 0 16px 0;
+}
+.tb-radio-option{
+  display:flex;
+  gap:12px;
+  padding:14px;
+  border:2px solid #E0E0E0;
+  border-radius:4px;
+  margin-bottom:10px;
+  cursor:pointer;
+  background:#FAFAFA;
+}
+.tb-radio-option:hover{
+  border-color:#FFDD2D;
+  background:#FFFBEB;
+}
+.tb-radio-option input{
+  margin-top:3px;
+  accent-color:#FFDD2D;
+}
+.tb-report-box .tb-btn-primary{
+  margin-top:16px;
+}
+
+/* Modal */
+.tb-modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+  padding:20px;
+}
+.tb-modal-overlay.open{
+  display:flex;
+}
+.tb-modal{
+  background:#FFF;
+  border:2px solid #000;
+  border-radius:4px;
+  width:min(1040px,100%);
+  max-height:90vh;
+  overflow-y:auto;
+  padding:24px;
+  position:relative;
+  box-shadow:8px 8px 0 rgba(0,0,0,.2);
+}
+.tb-modal-close{
+  position:absolute;
+  top:10px;
+  right:12px;
+  background:none;
+  border:none;
+  font-size:28px;
+  line-height:1;
+  cursor:pointer;
+  color:#666;
+}
+.tb-modal-close:hover{
+  color:#FF3B30;
+}
+
+/* Document viewer */
+.tb-doc-page{
+  font-size:14px;
+  color:#333;
+}
+.tb-doc-page-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:28px;
+  color:#000;
+  margin:0 0 4px 0;
+}
+.tb-doc-page-meta{
+  font-size:13px;
+  color:#888;
+  margin-bottom:20px;
+  padding-bottom:12px;
+  border-bottom:2px solid #F0F0F0;
+}
+.tb-doc-field-row{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  padding:10px 0;
+  border-bottom:1px solid #F0F0F0;
+}
+.tb-doc-label{
+  color:#888;
+  font-size:13px;
+}
+.tb-doc-value{
+  font-weight:600;
+  color:#000;
+  text-align:right;
+}
+.tb-ev-field{
+  background:none;
+  border:none;
+  border-bottom:1px solid transparent;
+  font:inherit;
+  font-weight:600;
+  color:#000;
+  cursor:pointer;
+  padding:0 1px;
+  transition:all .15s ease;
+}
+.tb-ev-field:hover{
+  border-bottom-color:#FFDD2D;
+  background:#FFFBEB;
+}
+.tb-ev-field.added{
+  border-bottom-color:#34C759;
+  background:#F1FFF4;
+}
+.tb-doc-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:16px;
+  font-size:12px;
+}
+.tb-doc-table th,
+.tb-doc-table td{
+  border:1px solid #E0E0E0;
+  padding:7px 9px;
+  text-align:left;
+  vertical-align:top;
+}
+.tb-doc-table th{
+  background:#F5F5F5;
+  font-family:'Bebas Neue',sans-serif;
+  letter-spacing:.5px;
+  color:#666;
+}
+.tb-doc-table tr:hover td{
+  background:#FAFAFA;
+}
+.tb-doc-note{
+  background:#F5F5F5;
+  padding:12px 14px;
+  border-left:3px solid #333;
+  margin-top:16px;
+  font-size:13px;
+  color:#555;
+}
+.tb-doc-signature{
+  margin-top:24px;
+  display:flex;
+  justify-content:space-between;
+  gap:20px;
+  font-size:13px;
+  color:#666;
+}
+.tb-doc-signature div{
+  border-top:1px solid #999;
+  padding-top:6px;
+  min-width:220px;
+}
+.tb-doc-section-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:18px;
+  margin:20px 0 8px 0;
+  color:#000;
+}
+.tb-doc-small{
+  font-size:12px;
+  color:#888;
+}
+
+/* Interview chat */
+.tb-interview-header{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-bottom:16px;
+}
+.tb-chat{
+  max-height:420px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-bottom:16px;
+  padding:4px;
+}
+.tb-msg{
+  padding:10px 12px;
+  border-radius:4px;
+  font-size:14px;
+  max-width:85%;
+  line-height:1.5;
+}
+.tb-msg.npc{
+  background:#F5F5F5;
+  border:1px solid #E0E0E0;
+  align-self:flex-start;
+}
+.tb-msg.player{
+  background:#FFDD2D;
+  border:2px solid #000;
+  align-self:flex-end;
+  color:#000;
+  font-weight:500;
+}
+.tb-msg.system{
+  background:#FFF5F5;
+  color:#FF3B30;
+  align-self:center;
+  font-size:12px;
+  border:1px dashed #FF3B30;
+}
+.tb-msg.success{
+  background:#E8F5E9;
+  color:#2E7D32;
+  align-self:center;
+  font-size:12px;
+  border:1px dashed #34C759;
+}
+.tb-msg.info{
+  background:#E3F2FD;
+  color:#1565C0;
+  align-self:center;
+  font-size:12px;
+  border:1px dashed #90CAF9;
+}
+.tb-choices{
+  display:grid;
+  gap:8px;
+}
+.tb-choice-btn{
+  display:block;
+  width:100%;
+  text-align:left;
+  padding:12px 14px;
+  border:2px solid #E0E0E0;
+  background:#FFF;
+  border-radius:4px;
+  cursor:pointer;
+  font-family:'Inter',sans-serif;
+  font-size:14px;
+  color:#333;
+}
+.tb-choice-btn:hover{
+  border-color:#FFDD2D;
+  background:#FFFBEB;
+}
+.tb-choice-btn.locked{
+  opacity:.55;
+  cursor:not-allowed;
+}
+
+/* Result */
+.tb-result-grid{
+  display:grid;
+  grid-template-columns:220px 1fr;
+  gap:24px;
+}
+.tb-score-circle{
+  width:180px;
+  height:180px;
+  border:6px solid #FFDD2D;
+  border-radius:50%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  margin:0 auto;
+  background:#FFFBEB;
+}
+.tb-score-num{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:56px;
+  line-height:1;
+  color:#000;
+}
+.tb-score-lbl{
+  font-size:13px;
+  color:#666;
+}
+.tb-breakdown{
+  display:grid;
+  gap:10px;
+}
+.tb-breakdown-item{
+  display:flex;
+  justify-content:space-between;
+  padding:10px 12px;
+  background:#F5F5F5;
+  border-radius:4px;
+  font-size:14px;
+}
+.tb-breakdown-item strong{
+  color:#000;
+}
+.tb-result-comment{
+  margin-top:16px;
+  padding:16px;
+  background:#FFF9E6;
+  border-left:4px solid #FF9500;
+  border-radius:4px;
+  font-size:14px;
+}
+.tb-result-controls{
+  margin-top:16px;
+}
+.tb-result-controls ul{
+  margin:8px 0 0 18px;
+  font-size:14px;
+  color:#333;
+}
+
+/* Toast */
+.tb-toast{
+  position:fixed;
+  bottom:24px;
+  left:50%;
+  transform:translateX(-50%) translateY(20px);
+  background:#1A1A1A;
+  color:#FFDD2D;
+  padding:12px 20px;
+  border-radius:4px;
+  border:2px solid #FFDD2D;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:16px;
+  letter-spacing:1px;
+  opacity:0;
+  pointer-events:none;
+  transition:all .25s ease;
+  z-index:10000;
+  max-width:90vw;
+  text-align:center;
+}
+.tb-toast.show{
+  opacity:1;
+  transform:translateX(-50%) translateY(0);
+}
+
+/* Responsive */
+@media (max-width:1024px){
+  .tb-metrics-grid{
+    grid-template-columns:repeat(2,1fr);
+  }
+  .tb-overview-split{
+    grid-template-columns:1fr;
+  }
+  .tb-result-grid{
+    grid-template-columns:1fr;
+  }
+  .tb-request-summary{
+    grid-template-columns:repeat(2,1fr);
+  }
+}
+
+@media (max-width:768px){
+  .tb-briefing-grid{
+    grid-template-columns:1fr;
+  }
+  .tb-resources-grid{
+    grid-template-columns:1fr;
+  }
+  .tb-briefing-title{
+    font-size:36px;
+  }
+  .tb-mobile-menu-toggle{
+    display:block;
+  }
+  .tb-sidebar{
+    position:fixed;
+    top:0;
+    left:0;
+    bottom:0;
+    z-index:1000;
+    transform:translateX(-100%);
+    box-shadow:4px 0 20px rgba(0,0,0,.1);
+  }
+  .tb-sidebar.open{
+    transform:translateX(0);
+  }
+  .tb-main-content{
+    padding:20px;
+  }
+  .tb-metrics-grid{
+    grid-template-columns:1fr;
+  }
+  .tb-top-bar-title h2{
+    font-size:18px;
+  }
+  .tb-phase-badge,
+  .tb-top-resource{
+    display:none;
+  }
+  .tb-table-controls,
+  .tb-docs-toolbar{
+    flex-direction:column;
+  }
+  .tb-request-summary{
+    grid-template-columns:1fr 1fr;
+  }
+}
+</style>
