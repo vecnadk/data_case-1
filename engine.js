@@ -2272,3 +2272,910 @@
   }
 
 })();
+
+/* =========================================================
+   M3c2: HYPOTHESES / DEVIL'S ADVOCATE
+   ========================================================= */
+
+(function () {
+  var TB = window.TB_ENGINE;
+
+  if (!TB) return;
+  if (TB.m3c2Loaded) return;
+
+  TB.m3c2Loaded = true;
+
+  TB.renderers = TB.renderers || {};
+
+  /* =========================
+     LOCAL HELPERS
+     ========================= */
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function setHtml(id, value) {
+    if (TB.setHtml) return TB.setHtml(id, value);
+    var el = $(id);
+    if (el) el.innerHTML = value == null ? '' : String(value);
+  }
+
+  function escapeHtml(value) {
+    if (TB.escapeHtml) return TB.escapeHtml(value);
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch];
+    });
+  }
+
+  function getHypById(id) {
+    if (!TB.data || !TB.data.hypotheses || !id) return null;
+
+    for (var i = 0; i < TB.data.hypotheses.length; i++) {
+      if (TB.data.hypotheses[i].id === id) {
+        return TB.data.hypotheses[i];
+      }
+    }
+
+    return null;
+  }
+
+  /* =========================
+     CONFIDENCE CALCULATION
+     ========================= */
+
+  function getHypothesisConfidence(hyp) {
+    if (!hyp || !TB.state || !TB.hasEvidence) return 0;
+
+    var required = hyp.required || [];
+    var optional = hyp.optional || [];
+
+    var requiredFound = required.filter(function (id) {
+      return TB.hasEvidence(id);
+    }).length;
+
+    var optionalFound = optional.filter(function (id) {
+      return TB.hasEvidence(id);
+    }).length;
+
+    var refutedBonus = TB.state.refutedHypotheses && TB.state.refutedHypotheses[hyp.id] ? 10 : 0;
+
+    var requiredScore = required.length
+      ? (requiredFound / required.length) * 70
+      : 0;
+
+    var optionalScore = Math.min(20, optionalFound * 3);
+
+    return Math.min(100, Math.round(requiredScore + optionalScore + refutedBonus));
+  }
+
+  TB.getHypothesisConfidence = getHypothesisConfidence;
+
+  /* =========================
+     RENDER HYPOTHESES
+     ========================= */
+
+  function renderHypotheses() {
+    if (!TB.data || !TB.data.hypotheses || !TB.state) return;
+
+    var container = $('render-hypotheses');
+    if (!container) return;
+
+    var hypotheses = TB.data.hypotheses;
+
+    if (!hypotheses.length) {
+      container.innerHTML = '<div class="tb-empty-state">ГИПОТЕЗЫ НЕ НАСТРОЕНЫ</div>';
+      renderDevilsAdvocate();
+      return;
+    }
+
+    var html = hypotheses.map(function (hyp) {
+      var selected = TB.state.selectedHypothesisId === hyp.id;
+      var confidence = getHypothesisConfidence(hyp);
+
+      var requiredHtml = (hyp.required || []).map(function (id) {
+        var done = TB.hasEvidence && TB.hasEvidence(id);
+        var title = TB.ev && TB.ev[id] ? TB.ev[id].title : id;
+
+        return '<li class="' + (done ? 'done' : '') + '">' + escapeHtml(title) + '</li>';
+      }).join('');
+
+      var optionalHtml = (hyp.optional || []).map(function (id) {
+        var done = TB.hasEvidence && TB.hasEvidence(id);
+        var title = TB.ev && TB.ev[id] ? TB.ev[id].title : id;
+
+        return '<li class="' + (done ? 'done' : '') + '">' + escapeHtml(title) + '</li>';
+      }).join('');
+
+      return '' +
+        '<div class="tb-hyp-card ' + (selected ? 'selected' : '') + '" data-hyp="' + escapeHtml(hyp.id) + '">' +
+          '<div class="tb-hyp-title">' + escapeHtml(hyp.title) + '</div>' +
+          '<div class="tb-hyp-desc">' + escapeHtml(hyp.desc) + '</div>' +
+
+          '<strong style="font-size:13px;color:#666;">Необходимые доказательства</strong>' +
+          '<ul class="tb-checklist">' +
+            (requiredHtml || '<li>Не указаны</li>') +
+          '</ul>' +
+
+          '<strong style="font-size:13px;color:#666;display:block;margin-top:12px;">Дополнительные улики</strong>' +
+          '<ul class="tb-checklist">' +
+            (optionalHtml || '<li>Не указаны</li>') +
+          '</ul>' +
+
+          '<div class="tb-confidence">' +
+            '<div class="tb-confidence-fill" style="width:' + confidence + '%"></div>' +
+          '</div>' +
+          '<div style="font-size:12px;color:#888;margin-top:6px;">Уверенность: ' + confidence + '%</div>' +
+        '</div>';
+    }).join('');
+
+    container.innerHTML = html;
+
+    renderDevilsAdvocate();
+  }
+
+  TB.renderers.hypotheses = renderHypotheses;
+  TB.renderHypotheses = renderHypotheses;
+
+  /* =========================
+     SELECT HYPOTHESIS
+     ========================= */
+
+  function selectHypothesis(hypId) {
+    if (!TB.state) return;
+
+    TB.state.selectedHypothesisId = hypId;
+
+    TB.state.hypotheses = TB.state.hypotheses || [];
+
+    if (TB.state.hypotheses.indexOf(hypId) === -1) {
+      TB.state.hypotheses.push(hypId);
+    }
+
+    renderHypotheses();
+
+    if (TB.updateCounters) TB.updateCounters();
+    if (TB.updateProgress) TB.updateProgress();
+  }
+
+  TB.selectHypothesis = selectHypothesis;
+
+  /* =========================
+     DEVIL'S ADVOCATE
+     ========================= */
+
+  function meetsRefutation(hyp) {
+    if (!hyp || !TB.hasEvidence) return false;
+
+    if (hyp.refutationAll && hyp.refutationAll.length) {
+      return hyp.refutationAll.every(function (id) {
+        return TB.hasEvidence(id);
+      });
+    }
+
+    if (hyp.refutationAny && hyp.refutationAny.length) {
+      return hyp.refutationAny.some(function (id) {
+        return TB.hasEvidence(id);
+      });
+    }
+
+    return false;
+  }
+
+  TB.meetsHypothesisRefutation = meetsRefutation;
+
+  function renderDevilsAdvocate() {
+    var container = $('render-devils-advocate');
+    if (!container || !TB.state) return;
+
+    var hyp = getHypById(TB.state.selectedHypothesisId);
+
+    if (!hyp) {
+      container.innerHTML = '' +
+        '<div class="tb-devils-advocate">' +
+          '<h3>АДВОКАТ ДЬЯВОЛА</h3>' +
+          '<p>Выберите гипотезу, чтобы система сформулировала сильнейшее альтернативное объяснение.</p>' +
+        '</div>';
+      return;
+    }
+
+    var refuted = !!(TB.state.refutedHypotheses && TB.state.refutedHypotheses[hyp.id]);
+    var canRefute = meetsRefutation(hyp);
+
+    var actionHtml = '';
+
+    if (refuted) {
+      actionHtml = '<div class="tb-msg success">Альтернативная версия опровергнута. Уверенность повышена.</div>';
+    } else {
+      actionHtml =
+        '<button class="tb-btn-secondary" type="button" data-refute-hyp="' + escapeHtml(hyp.id) + '">' +
+          'ПОПЫТАТЬСЯ ОПРОВЕРГНУТЬ' +
+        '</button>';
+    }
+
+    var noteHtml = '';
+
+    if (!refuted && !canRefute) {
+      noteHtml =
+        '<p style="font-size:13px;color:#888;margin-top:10px;">' +
+          'Для опровержения нужны дополнительные доказательства из скрытых документов, запросов или интервью.' +
+        '</p>';
+    }
+
+    container.innerHTML = '' +
+      '<div class="tb-devils-advocate">' +
+        '<h3>АДВОКАТ ДЬЯВОЛА</h3>' +
+        '<p>' + escapeHtml(hyp.devilsAdvocate || '') + '</p>' +
+        actionHtml +
+        noteHtml +
+      '</div>';
+  }
+
+  TB.renderDevilsAdvocate = renderDevilsAdvocate;
+
+  /* =========================
+     TRY REFUTE HYPOTHESIS
+     ========================= */
+
+  function tryRefuteHypothesis(hypId) {
+    if (!TB.state) return;
+
+    var hyp = getHypById(hypId);
+    if (!hyp) return;
+
+    if (!meetsRefutation(hyp)) {
+      TB.showToast('НЕДОСТАТОЧНО ДОКАЗАТЕЛЬСТВ ДЛЯ ОПРОВЕРЖЕНИЯ');
+      return;
+    }
+
+    TB.state.refutedHypotheses = TB.state.refutedHypotheses || {};
+    TB.state.refutedHypotheses[hypId] = true;
+
+    renderHypotheses();
+
+    if (TB.updateProgress) TB.updateProgress();
+
+    TB.showToast('АЛЬТЕРНАТИВНАЯ ВЕРСИЯ ОПРОВЕРГНУТА');
+  }
+
+  TB.tryRefuteHypothesis = tryRefuteHypothesis;
+
+  /* =========================
+     DELEGATION
+     ========================= */
+
+  document.addEventListener('click', function (event) {
+    var hypCard = event.target.closest('[data-hyp]');
+    if (hypCard) {
+      selectHypothesis(hypCard.getAttribute('data-hyp'));
+      return;
+    }
+
+    var refuteBtn = event.target.closest('[data-refute-hyp]');
+    if (refuteBtn) {
+      tryRefuteHypothesis(refuteBtn.getAttribute('data-refute-hyp'));
+      return;
+    }
+  });
+
+  /* =========================
+     REFRESH AFTER EVIDENCE CHANGE
+     ========================= */
+
+  if (TB.refreshAfterEvidenceChange) {
+    var oldRefreshAfterEvidenceChange = TB.refreshAfterEvidenceChange;
+
+    TB.refreshAfterEvidenceChange = function () {
+      oldRefreshAfterEvidenceChange();
+      renderHypotheses();
+    };
+  } else {
+    TB.refreshAfterEvidenceChange = function () {
+      renderHypotheses();
+    };
+  }
+
+  /* =========================
+     ENSURE RENDER WORKSPACE INCLUDES HYPOTHESES
+     ========================= */
+
+  if (TB.renderWorkspace) {
+    var oldRenderWorkspace = TB.renderWorkspace;
+
+    TB.renderWorkspace = function () {
+      oldRenderWorkspace();
+      renderHypotheses();
+    };
+  }
+
+})();
+
+/* =========================================================
+   M3d: GRAPH / CONTROLS / FINAL REPORT / SCORING
+   ========================================================= */
+
+(function () {
+  var TB = window.TB_ENGINE;
+
+  if (!TB) return;
+  if (TB.m3dLoaded) return;
+
+  TB.m3dLoaded = true;
+
+  TB.renderers = TB.renderers || {};
+
+  /* =========================
+     LOCAL HELPERS
+     ========================= */
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function setText(id, value) {
+    if (TB.setText) return TB.setText(id, value);
+    var el = $(id);
+    if (el) el.textContent = value == null ? '' : String(value);
+  }
+
+  function setHtml(id, value) {
+    if (TB.setHtml) return TB.setHtml(id, value);
+    var el = $(id);
+    if (el) el.innerHTML = value == null ? '' : String(value);
+  }
+
+  function escapeHtml(value) {
+    if (TB.escapeHtml) return TB.escapeHtml(value);
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch];
+    });
+  }
+
+  function hasEv(id) {
+    return !!(TB.hasEvidence && TB.hasEvidence(id));
+  }
+
+  function evTitle(id) {
+    return TB.ev && TB.ev[id] ? TB.ev[id].title : id;
+  }
+
+  function getHypById(id) {
+    if (!TB.data || !TB.data.hypotheses || !id) return null;
+
+    for (var i = 0; i < TB.data.hypotheses.length; i++) {
+      if (TB.data.hypotheses[i].id === id) {
+        return TB.data.hypotheses[i];
+      }
+    }
+
+    return null;
+  }
+
+  function getEvidenceList() {
+    if (!TB.state || !TB.state.evidence) return [];
+
+    return Object.keys(TB.state.evidence).map(function (id) {
+      return TB.state.evidence[id];
+    });
+  }
+
+  /* =========================
+     GRAPH
+     ========================= */
+
+  function renderGraph() {
+    var container = $('render-graph');
+    if (!container) return;
+
+    var nodes = {
+      procurement:
+        hasEv('contract_signed_by_volkov') ||
+        hasEv('email_expedite_before_audit') ||
+        hasEv('volkov_admits_relative') ||
+        hasEv('volkov_pressured_accountant'),
+
+      carrier:
+        hasEv('vendor_registered_recently') ||
+        hasEv('vendor_mass_address') ||
+        hasEv('compliance_vendor_shell_indicators') ||
+        hasEv('compliance_beneficial_relative_volkov'),
+
+      docs:
+        hasEv('invoice_container_reuse_pattern') ||
+        hasEv('bol_issue_date_0302') ||
+        hasEv('logistics_vessel_schedule_mismatch') ||
+        hasEv('logistics_dispatch_no_booking'),
+
+      tracking:
+        hasEv('invoice_tracking_gc77x9') ||
+        hasEv('it_tracking_domain_fresh') ||
+        hasEv('it_tracking_ip_overlap') ||
+        hasEv('it_tracking_template_site') ||
+        hasEv('it_site_manual_status_update'),
+
+      warehouse:
+        hasEv('payment_without_grn') ||
+        hasEv('warehouse_grn_absent_pattern') ||
+        hasEv('warehouse_confirms_no_receipt') ||
+        hasEv('warehouse_courier_signature_pattern') ||
+        hasEv('warehouse_no_gate_record'),
+
+      customs:
+        hasEv('customs_manual_release_high_risk') ||
+        hasEv('customs_no_inspection_record'),
+
+      bank:
+        hasEv('payment_rapid_1_2_days') ||
+        hasEv('bank_account_opened_before_first_payment') ||
+        hasEv('bank_round_trip_related_entities')
+    };
+
+    var danger = {
+      docs:
+        hasEv('logistics_vessel_schedule_mismatch') ||
+        hasEv('logistics_dispatch_no_booking'),
+
+      tracking:
+        hasEv('it_tracking_template_site') ||
+        hasEv('it_site_manual_status_update') ||
+        hasEv('it_tracking_ip_overlap'),
+
+      warehouse:
+        hasEv('warehouse_grn_absent_pattern') ||
+        hasEv('warehouse_confirms_no_receipt') ||
+        hasEv('warehouse_no_gate_record'),
+
+      bank:
+        hasEv('bank_round_trip_related_entities')
+    };
+
+    function nodeClass(key) {
+      if (!nodes[key]) return '';
+      if (danger[key]) return 'danger';
+      return 'active';
+    }
+
+    function edgeClass(a, b) {
+      return nodes[a] && nodes[b] ? 'active' : '';
+    }
+
+    var svg = '' +
+      '<svg class="tb-graph-svg" viewBox="0 0 900 380" fill="none">' +
+
+        '<circle cx="120" cy="190" r="46" class="graph-node ' + nodeClass('procurement') + '" />' +
+        '<text x="120" y="185" class="graph-label">Закупки</text>' +
+        '<text x="120" y="202" class="graph-label">Волков А.П.</text>' +
+
+        '<circle cx="310" cy="90" r="42" class="graph-node ' + nodeClass('carrier') + '" />' +
+        '<text x="310" y="95" class="graph-label">Экспедитор</text>' +
+
+        '<circle cx="310" cy="290" r="42" class="graph-node ' + nodeClass('docs') + '" />' +
+        '<text x="310" y="285" class="graph-label">Документы</text>' +
+        '<text x="310" y="302" class="graph-label">BOL / инвойсы</text>' +
+
+        '<circle cx="500" cy="190" r="48" class="graph-node ' + nodeClass('tracking') + '" />' +
+        '<text x="500" y="185" class="graph-label">Трекинг</text>' +
+        '<text x="500" y="202" class="graph-label">GPS / dispatch</text>' +
+
+        '<circle cx="680" cy="90" r="42" class="graph-node ' + nodeClass('warehouse') + '" />' +
+        '<text x="680" y="95" class="graph-label">Склад</text>' +
+
+        '<circle cx="680" cy="290" r="42" class="graph-node ' + nodeClass('customs') + '" />' +
+        '<text x="680" y="295" class="graph-label">Таможня</text>' +
+
+        '<circle cx="840" cy="190" r="38" class="graph-node ' + nodeClass('bank') + '" />' +
+        '<text x="840" y="195" class="graph-label">Банк</text>' +
+
+        '<line x1="162" y1="170" x2="270" y2="108" class="graph-edge ' + edgeClass('procurement', 'carrier') + '" />' +
+        '<line x1="162" y1="210" x2="270" y2="272" class="graph-edge ' + edgeClass('procurement', 'docs') + '" />' +
+        '<line x1="348" y1="108" x2="458" y2="172" class="graph-edge ' + edgeClass('carrier', 'tracking') + '" />' +
+        '<line x1="348" y1="272" x2="458" y2="208" class="graph-edge ' + edgeClass('docs', 'tracking') + '" />' +
+        '<line x1="542" y1="172" x2="642" y2="108" class="graph-edge ' + edgeClass('tracking', 'warehouse') + '" />' +
+        '<line x1="542" y1="208" x2="642" y2="272" class="graph-edge ' + edgeClass('tracking', 'customs') + '" />' +
+        '<line x1="718" y1="108" x2="808" y2="172" class="graph-edge ' + edgeClass('warehouse', 'bank') + '" />' +
+        '<line x1="718" y1="272" x2="808" y2="208" class="graph-edge ' + edgeClass('customs', 'bank') + '" />' +
+
+      '</svg>' +
+
+      '<div class="tb-doc-note" style="margin-top:16px;">' +
+        'Граф собирается только из подтверждённых фактов. Пока часть узлов серая — схема не доказана.' +
+      '</div>';
+
+    container.innerHTML = svg;
+  }
+
+  TB.renderGraph = renderGraph;
+  TB.renderers.graph = renderGraph;
+
+  /* =========================
+     CONTROLS
+     ========================= */
+
+  function renderControls() {
+    var container = $('render-controls');
+    if (!container || !TB.data || !TB.data.controls) return;
+
+    var controls = TB.data.controls;
+
+    if (!controls.length) {
+      container.innerHTML = '<div class="tb-empty-state">КОНТРОЛИ НЕ НАСТРОЕНЫ</div>';
+      return;
+    }
+
+    container.innerHTML = controls.map(function (c) {
+      var checked = TB.state && TB.state.controlsSelected && TB.state.controlsSelected[c.id] ? 'checked' : '';
+
+      return '' +
+        '<label class="tb-control-option">' +
+          '<input type="checkbox" data-control="' + escapeHtml(c.id) + '" ' + checked + '>' +
+          '<div class="tb-control-text">' +
+            '<strong>' + escapeHtml(c.text) + '</strong>' +
+            '<span>' + escapeHtml(c.category || '') + ' • ' + escapeHtml(c.desc || '') + '</span>' +
+          '</div>' +
+        '</label>';
+    }).join('');
+  }
+
+  TB.renderControls = renderControls;
+  TB.renderers.controls = renderControls;
+
+  /* =========================
+     FINAL RESULT CALCULATION
+     ========================= */
+
+  function calculateResult(conclusion) {
+    var hypotheses = TB.data && TB.data.hypotheses ? TB.data.hypotheses : [];
+    var correctHyp = null;
+    var selectedHyp = getHypById(TB.state && TB.state.selectedHypothesisId);
+
+    hypotheses.forEach(function (h) {
+      if (h.correct === true) correctHyp = h;
+    });
+
+    var confidence = selectedHyp && TB.getHypothesisConfidence
+      ? TB.getHypothesisConfidence(selectedHyp)
+      : 0;
+
+    var evidenceList = getEvidenceList();
+    var noiseEvidence = evidenceList.filter(function (e) {
+      return e.noise;
+    });
+
+    var signalWeight = evidenceList.reduce(function (sum, e) {
+      return e.noise ? sum : sum + (Number(e.weight) || 0);
+    }, 0);
+
+    var accuracy = 0;
+    var ethics = 10;
+    var comment = '';
+
+    if (!selectedHyp) {
+      accuracy = 5;
+      ethics -= 3;
+      comment = 'Гипотеза не выбрана. Аудитор должен явно зафиксировать рабочую версию и проверить её доказательствами.';
+    } else if (conclusion === 'fraud') {
+      var requiredComplete = correctHyp && correctHyp.required
+        ? correctHyp.required.every(hasEv)
+        : false;
+
+      if (
+        correctHyp &&
+        selectedHyp.id === correctHyp.id &&
+        confidence >= 85 &&
+        noiseEvidence.length <= 2 &&
+        requiredComplete
+      ) {
+        accuracy = 40;
+        comment = 'Схема TBML через фантомную логистику раскрыта. Доказательственная база достаточна для эскалации в службу безопасности и комплаенс.';
+      } else if (confidence >= 65) {
+        accuracy = 25;
+        ethics -= 5;
+        comment = 'Направление верное, но часть ключевых доказательств не собрана. Преждевременная эскалация создаёт procedural risk.';
+      } else {
+        accuracy = 5;
+        ethics -= 10;
+        comment = 'Обвинение не подтверждено достаточной базой. Возможны ложный вывод и нарушение принципа professional skepticism without prejudice.';
+      }
+    } else if (conclusion === 'insufficient') {
+      if (confidence >= 85) {
+        accuracy = 15;
+        comment = 'Вы были осторожны, но упустили достаточно доказанную схему. В реальности потери могли бы продолжаться.';
+      } else {
+        accuracy = 35;
+        comment = 'Процедурно корректно: текущих доказательств недостаточно для окончательного вывода о мошенничестве.';
+      }
+    } else if (conclusion === 'error') {
+      if (confidence >= 85) {
+        accuracy = 5;
+        comment = 'Ошибка учёта слабо объясняет фейковый трекинг, отсутствие dispatch log, транзитные платежи и конфликт интересов.';
+      } else {
+        accuracy = 20;
+        comment = 'Частично верно, но не учтены признаки умышленного обхода контролей.';
+      }
+    }
+
+    if (
+      selectedHyp &&
+      correctHyp &&
+      selectedHyp.id !== correctHyp.id &&
+      conclusion === 'fraud'
+    ) {
+      accuracy = Math.min(accuracy, 10);
+      ethics -= 5;
+      comment += ' Выбранная гипотеза не соответствует совокупности доказательств.';
+    }
+
+    var evidenceScore = Math.min(
+      25,
+      Math.round(confidence / 4) + Math.min(5, Math.floor(signalWeight / 120))
+    );
+
+    var timePct = TB.state && TB.state.totalTime > 0
+      ? TB.state.timeLeft / TB.state.totalTime
+      : 0;
+
+    var timeliness = Math.max(0, Math.round(15 * timePct));
+
+    var selectedControls = (TB.data.controls || []).filter(function (c) {
+      return TB.state && TB.state.controlsSelected && TB.state.controlsSelected[c.id];
+    });
+
+    var goodControls = selectedControls.filter(function (c) {
+      return c.good === true;
+    });
+
+    var badControls = selectedControls.filter(function (c) {
+      return c.good !== true;
+    });
+
+    var prevention = Math.max(
+      0,
+      Math.min(15, goodControls.length * 2 - badControls.length * 4)
+    );
+
+    ethics -= badControls.length * 2;
+    ethics -= Math.min(4, noiseEvidence.length);
+    ethics = Math.max(0, ethics);
+
+    var total = Math.max(
+      0,
+      Math.min(100, accuracy + evidenceScore + timeliness + prevention + ethics)
+    );
+
+    var missingRequired = [];
+
+    if (correctHyp && correctHyp.required) {
+      missingRequired = correctHyp.required
+        .filter(function (id) {
+          return !hasEv(id);
+        })
+        .map(evTitle);
+    }
+
+    return {
+      total: total,
+      accuracy: accuracy,
+      evidenceScore: evidenceScore,
+      timeliness: timeliness,
+      prevention: prevention,
+      ethics: ethics,
+      comment: comment,
+      goodControls: goodControls,
+      badControls: badControls,
+      confidence: confidence,
+      conclusion: conclusion,
+      selectedHyp: selectedHyp,
+      correctHyp: correctHyp,
+      missingRequired: missingRequired,
+      noiseEvidence: noiseEvidence,
+      evidenceCount: evidenceList.length
+    };
+  }
+
+  TB.calculateResult = calculateResult;
+
+  /* =========================
+     RESULT MODAL
+     ========================= */
+
+  function renderResultModal(r) {
+    var missingHtml = '';
+
+    if (r.missingRequired && r.missingRequired.length) {
+      missingHtml =
+        '<div style="margin-top:16px;">' +
+          '<strong>Ключевые доказательства, которые стоило собрать:</strong>' +
+          '<ul style="margin:8px 0 0 18px;font-size:14px;color:#333;">' +
+            r.missingRequired.slice(0, 7).map(function (item) {
+              return '<li>' + escapeHtml(item) + '</li>';
+            }).join('') +
+          '</ul>' +
+        '</div>';
+    }
+
+    var noiseHtml = '';
+
+    if (r.noiseEvidence && r.noiseEvidence.length) {
+      noiseHtml =
+        '<div style="margin-top:12px;color:#C62828;">' +
+          '<strong>Шумовые выводы:</strong> ' + escapeHtml(r.noiseEvidence.length) +
+          '. Часть собранных фактов не помогает раскрытию и может мешать профессиональному суждению.' +
+        '</div>';
+    }
+
+    var goodHtml = '';
+
+    if (r.goodControls && r.goodControls.length) {
+      goodHtml =
+        '<ul>' +
+          r.goodControls.map(function (c) {
+            return '<li>' + escapeHtml(c.text) + '</li>';
+          }).join('') +
+        '</ul>';
+    } else {
+      goodHtml = '<p>Не выбрано ни одного сильного контроля.</p>';
+    }
+
+    var badHtml = '';
+
+    if (r.badControls && r.badControls.length) {
+      badHtml =
+        '<div style="margin-top:12px;color:#C62828;">' +
+          '<strong>Проблемные решения:</strong>' +
+          '<ul>' +
+            r.badControls.map(function (c) {
+              return '<li>' + escapeHtml(c.text) + '</li>';
+            }).join('') +
+          '</ul>' +
+        '</div>';
+    }
+
+    var content = '' +
+      '<h2 style="font-family:\'Bebas Neue\',sans-serif;font-size:36px;margin:0 0 20px 0;">РЕЗУЛЬТАТ РАССЛЕДОВАНИЯ</h2>' +
+
+      '<div class="tb-result-grid">' +
+
+        '<div>' +
+          '<div class="tb-score-circle">' +
+            '<div class="tb-score-num">' + escapeHtml(r.total) + '</div>' +
+            '<div class="tb-score-lbl">ИТОГОВЫЙ БАЛЛ</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div>' +
+          '<div class="tb-breakdown">' +
+            '<div class="tb-breakdown-item"><span>Точность вывода</span><strong>' + escapeHtml(r.accuracy) + ' / 40</strong></div>' +
+            '<div class="tb-breakdown-item"><span>Сила доказательств</span><strong>' + escapeHtml(r.evidenceScore) + ' / 25</strong></div>' +
+            '<div class="tb-breakdown-item"><span>Своевременность</span><strong>' + escapeHtml(r.timeliness) + ' / 15</strong></div>' +
+            '<div class="tb-breakdown-item"><span>Профилактика</span><strong>' + escapeHtml(r.prevention) + ' / 15</strong></div>' +
+            '<div class="tb-breakdown-item"><span>Этичность</span><strong>' + escapeHtml(r.ethics) + ' / 10</strong></div>' +
+          '</div>' +
+
+          '<div class="tb-result-comment">' +
+            '<strong>Комментарий системы:</strong><br>' +
+            escapeHtml(r.comment) +
+          '</div>' +
+
+          missingHtml +
+          noiseHtml +
+
+          '<div class="tb-result-controls">' +
+            '<strong>Эффективные контроли:</strong>' +
+            goodHtml +
+            badHtml +
+          '</div>' +
+
+          '<div style="margin-top:16px;font-size:14px;color:#666;">' +
+            '<strong>Выбранная гипотеза:</strong> ' + escapeHtml(r.selectedHyp ? r.selectedHyp.title : 'не выбрана') + '<br>' +
+            '<strong>Правильная гипотеза:</strong> ' + escapeHtml(r.correctHyp ? r.correctHyp.title : 'не определена') + '<br>' +
+            '<strong>Уверенность:</strong> ' + escapeHtml(r.confidence) + '%<br>' +
+            '<strong>Доказательств собрано:</strong> ' + escapeHtml(r.evidenceCount) + '<br>' +
+            '<strong>Запросов одобрено:</strong> ' + escapeHtml(TB.state.requestsApproved || 0) + '<br>' +
+            '<strong>Интервью проведено:</strong> ' + escapeHtml(TB.state.completedInterviews || 0) +
+          '</div>' +
+
+          '<div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">' +
+            '<a href="/cases" class="tb-btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;">В БИБЛИОТЕКУ КЕЙСОВ</a>' +
+            '<button class="tb-btn-secondary" type="button" onclick="TB_ENGINE.closeModal()">ОСТАТЬСЯ НА СТРАНИЦЕ</button>' +
+            '<button class="tb-btn-secondary" type="button" onclick="window.location.reload()">ПРОЙТИ ЗАНОВО</button>' +
+          '</div>' +
+
+        '</div>' +
+
+      '</div>';
+
+    TB.openModal(content);
+  }
+
+  TB.renderResultModal = renderResultModal;
+
+  /* =========================
+     SUBMIT FINAL REPORT
+     ========================= */
+
+  function submitFinalReport() {
+    if (!TB.state) {
+      TB.showToast('ИГРА ЕЩЁ НЕ ЗАПУЩЕНА');
+      return;
+    }
+
+    var sel = document.querySelector('input[name="conclusion"]:checked');
+    var conclusion = sel ? sel.value : null;
+
+    if (!conclusion) {
+      TB.showToast('ВЫБЕРИТЕ ВЫВОД');
+      return;
+    }
+
+    clearInterval(TB.timerInterval);
+
+    var result = calculateResult(conclusion);
+    renderResultModal(result);
+  }
+
+  TB.submitFinalReport = submitFinalReport;
+
+  /* =========================
+     ENSURE WORKSPACE RENDERS NEW PARTS
+     ========================= */
+
+  if (TB.renderWorkspace) {
+    var oldRenderWorkspace = TB.renderWorkspace;
+
+    TB.renderWorkspace = function () {
+      oldRenderWorkspace();
+
+      renderGraph();
+      renderControls();
+
+      if (TB.updateCounters) TB.updateCounters();
+      if (TB.updateProgress) TB.updateProgress();
+    };
+  } else {
+    TB.renderWorkspace = function () {
+      if (TB.renderers.overview) TB.renderers.overview();
+      if (TB.renderers.documents) TB.renderers.documents();
+      if (TB.renderers.transactions) TB.renderers.transactions();
+      if (TB.renderers.requests) TB.renderers.requests();
+      if (TB.renderers.interviews) TB.renderers.interviews();
+      if (TB.renderers.hypotheses) TB.renderers.hypotheses();
+      if (TB.renderers.evidence) TB.renderers.evidence();
+
+      renderGraph();
+      renderControls();
+
+      if (TB.updateCounters) TB.updateCounters();
+      if (TB.updateProgress) TB.updateProgress();
+    };
+  }
+
+  /* =========================
+     REFRESH AFTER EVIDENCE CHANGE
+     ========================= */
+
+  if (TB.refreshAfterEvidenceChange) {
+    var oldRefreshAfterEvidenceChange = TB.refreshAfterEvidenceChange;
+
+    TB.refreshAfterEvidenceChange = function () {
+      oldRefreshAfterEvidenceChange();
+      renderGraph();
+    };
+  } else {
+    TB.refreshAfterEvidenceChange = function () {
+      renderGraph();
+    };
+  }
+
+})();
