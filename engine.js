@@ -842,3 +842,1433 @@
     TB.boot();
   }
 })();
+
+/* =========================================================
+   M3b1: DOCUMENTS / EVIDENCE / OVERVIEW / BASIC STATE
+   ========================================================= */
+
+(function () {
+  var TB = window.TB_ENGINE;
+
+  if (!TB) return;
+  if (TB.m3b1Loaded) return;
+
+  TB.m3b1Loaded = true;
+
+  TB.renderers = TB.renderers || {};
+
+  /* =========================
+     HELPERS
+     ========================= */
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function setText(id, value) {
+    if (TB.setText) return TB.setText(id, value);
+    var el = $(id);
+    if (el) el.textContent = value == null ? '' : String(value);
+  }
+
+  function setHtml(id, value) {
+    if (TB.setHtml) return TB.setHtml(id, value);
+    var el = $(id);
+    if (el) el.innerHTML = value == null ? '' : String(value);
+  }
+
+  function escapeHtml(value) {
+    if (TB.escapeHtml) return TB.escapeHtml(value);
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch];
+    });
+  }
+
+  function forEachNode(list, fn) {
+    Array.prototype.forEach.call(list || [], fn);
+  }
+
+  /* =========================
+     EVIDENCE CORE
+     ========================= */
+
+  function hasEvidence(id) {
+    return !!(TB.state && TB.state.evidence && TB.state.evidence[id]);
+  }
+
+  function addEvidence(id, notify) {
+    if (notify === undefined) notify = true;
+    if (!TB.ev || !TB.ev[id]) return false;
+    if (!TB.state) return false;
+    if (TB.state.evidence[id]) return false;
+
+    var data = TB.ev[id];
+
+    TB.state.evidence[id] = {
+      id: id,
+      title: data.title,
+      source: data.source,
+      reliability: data.reliability,
+      weight: data.weight,
+      tags: data.tags || [],
+      noise: !!data.noise
+    };
+
+    if (notify) TB.showToast('УЛИКА ДОБАВЛЕНА');
+
+    refreshAfterEvidenceChange();
+    return true;
+  }
+
+  function removeEvidence(id) {
+    if (!TB.state || !TB.state.evidence[id]) return false;
+    delete TB.state.evidence[id];
+    TB.showToast('УЛИКА УДАЛЕНА');
+    refreshAfterEvidenceChange();
+    return true;
+  }
+
+  TB.hasEvidence = hasEvidence;
+  TB.addEvidence = addEvidence;
+  TB.removeEvidence = removeEvidence;
+
+  /* =========================
+     REQUEST / DOC AVAILABILITY
+     ========================= */
+
+  function getRequestById(id) {
+    if (!TB.data || !TB.data.requests) return null;
+    for (var i = 0; i < TB.data.requests.length; i++) {
+      if (TB.data.requests[i].id === id) return TB.data.requests[i];
+    }
+    return null;
+  }
+
+  function isRequestApproved(requestId) {
+    return !!(
+      TB.state &&
+      TB.state.requests &&
+      TB.state.requests[requestId] &&
+      TB.state.requests[requestId].status === 'approved'
+    );
+  }
+
+  function isDocAvailable(doc) {
+    if (!doc) return false;
+    if (!doc.locked) return true;
+    if (!doc.unlockedBy) return true;
+    return isRequestApproved(doc.unlockedBy);
+  }
+
+  function getDocStatusLabel(doc) {
+    if (!doc.locked) {
+      return { cls: 'available', text: 'ДОСТУПЕН' };
+    }
+
+    if (isDocAvailable(doc)) {
+      return { cls: 'unlocked', text: 'РАЗБЛОКИРОВАН' };
+    }
+
+    return { cls: 'hidden', text: 'СКРЫТ / НУЖЕН ЗАПРОС' };
+  }
+
+  TB.getRequestById = getRequestById;
+  TB.isRequestApproved = isRequestApproved;
+  TB.isDocAvailable = isDocAvailable;
+  TB.getDocStatusLabel = getDocStatusLabel;
+
+  /* =========================
+     DOCUMENT FIELD STATES
+     ========================= */
+
+  function updateDocumentFieldStates() {
+    forEachNode(document.querySelectorAll('.tb-ev-field'), function (btn) {
+      var id = btn.getAttribute('data-ev');
+      if (!id) return;
+
+      if (hasEvidence(id)) {
+        btn.classList.add('added');
+      } else {
+        btn.classList.remove('added');
+      }
+    });
+  }
+
+  TB.updateDocumentFieldStates = updateDocumentFieldStates;
+
+  /* =========================
+     RENDER OVERVIEW
+     ========================= */
+
+  function renderOverview() {
+    if (!TB.data) return;
+
+    var metrics = TB.data.metrics || [];
+
+    setHtml('render-metrics', metrics.map(function (m) {
+      return '' +
+        '<div class="tb-metric-card ' + escapeHtml(m.type || '') + '">' +
+          '<h4>' + escapeHtml(m.title) + '</h4>' +
+          '<div class="tb-metric-val">' + escapeHtml(m.val) + '</div>' +
+          '<div class="tb-metric-lbl">' + escapeHtml(m.lbl) + '</div>' +
+        '</div>';
+    }).join(''));
+
+    setText('render-context-short', TB.data.context || '');
+
+    setHtml('render-alerts-short', (TB.data.alerts || []).map(function (a) {
+      return '<li>' + escapeHtml(a) + '</li>';
+    }).join(''));
+  }
+
+  TB.renderers.overview = renderOverview;
+  TB.renderOverview = renderOverview;
+
+  /* =========================
+     RENDER DOCUMENTS
+     ========================= */
+
+  function renderDocuments() {
+    if (!TB.data || !TB.data.documents) return;
+
+    var docs = TB.data.documents;
+    var search = (($('doc-search') && $('doc-search').value) || '').toLowerCase();
+    var filter = ($('doc-filter') && $('doc-filter').value) || 'all';
+
+    var filtered = docs.filter(function (doc) {
+      var available = isDocAvailable(doc);
+      var haystack = [doc.type, doc.title, doc.meta].join(' ').toLowerCase();
+
+      if (search && haystack.indexOf(search) === -1) return false;
+      if (filter === 'available' && !available) return false;
+      if (filter === 'hidden' && available) return false;
+
+      return true;
+    });
+
+    if (!filtered.length) {
+      setHtml('render-docs', '<div class="tb-empty-state">ДОКУМЕНТЫ НЕ НАЙДЕНЫ</div>');
+      return;
+    }
+
+    setHtml('render-docs', filtered.map(function (doc) {
+      var available = isDocAvailable(doc);
+      var status = getDocStatusLabel(doc);
+      var req = doc.unlockedBy ? getRequestById(doc.unlockedBy) : null;
+
+      return '' +
+        '<div class="tb-doc-card ' + (available ? '' : 'locked') + '" data-doc="' + escapeHtml(doc.id) + '" data-available="' + (available ? '1' : '0') + '">' +
+          '<div class="tb-doc-type">' + escapeHtml(doc.type) + '</div>' +
+          '<div class="tb-doc-name">' + escapeHtml(doc.title) + '</div>' +
+          '<div class="tb-doc-meta">' + escapeHtml(doc.meta) + '</div>' +
+          '<div class="tb-doc-status ' + status.cls + '">' + escapeHtml(status.text) + '</div>' +
+          (!available && req ? '<div class="tb-doc-small">Требуется запрос: ' + escapeHtml(req.title) + '</div>' : '') +
+        '</div>';
+    }).join(''));
+  }
+
+  TB.renderers.documents = renderDocuments;
+  TB.renderDocuments = renderDocuments;
+
+  /* =========================
+     OPEN DOCUMENT
+     ========================= */
+
+  function openDocument(docId) {
+    if (!TB.data || !TB.data.documents) return;
+
+    var doc = null;
+
+    for (var i = 0; i < TB.data.documents.length; i++) {
+      if (TB.data.documents[i].id === docId) {
+        doc = TB.data.documents[i];
+        break;
+      }
+    }
+
+    if (!doc) return;
+
+    if (!isDocAvailable(doc)) {
+      var req = doc.unlockedBy ? getRequestById(doc.unlockedBy) : null;
+      TB.showToast(req ? 'НУЖЕН ЗАПРОС: ' + req.title.toUpperCase() : 'ДОКУМЕНТ НЕДОСТУПЕН');
+      return;
+    }
+
+    TB.openModal(doc.html);
+    updateDocumentFieldStates();
+  }
+
+  TB.openDocument = openDocument;
+
+  /* =========================
+     RENDER EVIDENCE
+     ========================= */
+
+  function getReliabilityLabel(r) {
+    if (r === 'high') return 'высокая';
+    if (r === 'medium') return 'средняя';
+    return 'низкая';
+  }
+
+  function renderEvidence() {
+    var container = $('render-evidence');
+    if (!container || !TB.state) return;
+
+    var items = Object.keys(TB.state.evidence).map(function (id) {
+      return TB.state.evidence[id];
+    });
+
+    if (!items.length) {
+      container.innerHTML = '<div class="tb-empty-state">ДОКАЗАТЕЛЬСТВ ПОКА НЕТ</div>';
+      return;
+    }
+
+    container.innerHTML = items.map(function (ev) {
+      return '' +
+        '<div class="tb-evidence-item ' + escapeHtml(ev.reliability) + '">' +
+          '<button class="tb-remove-btn" type="button" data-remove-ev="' + escapeHtml(ev.id) + '">УДАЛИТЬ</button>' +
+          '<div class="tb-evidence-title">' + escapeHtml(ev.title) + '</div>' +
+          '<div class="tb-evidence-meta">' +
+            'Источник: ' + escapeHtml(ev.source) +
+            ' • Надёжность: ' + escapeHtml(getReliabilityLabel(ev.reliability)) +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  TB.renderers.evidence = renderEvidence;
+  TB.renderEvidence = renderEvidence;
+
+  /* =========================
+     COUNTERS / PROGRESS
+     ========================= */
+
+  function updateCounters() {
+    if (!TB.data || !TB.state) return;
+
+    var docs = TB.data.documents || [];
+    var availableDocs = docs.filter(isDocAvailable).length;
+
+    setText('c-docs', String(availableDocs));
+    setText('c-trans', String((TB.data.transactions || []).length));
+    setText('c-ev', String(Object.keys(TB.state.evidence).length));
+    setText('c-hyp', String(TB.state.hypotheses ? TB.state.hypotheses.length : 0));
+    setText('c-int', (TB.state.completedInterviews || 0) + '/' + (TB.data.maxInterviews || 3));
+
+    if (TB.updateTopResources) TB.updateTopResources();
+  }
+
+  TB.updateCounters = updateCounters;
+
+  function updateProgress() {
+    if (!TB.state) return;
+
+    var evidenceItems = Object.keys(TB.state.evidence).map(function (id) {
+      return TB.state.evidence[id];
+    });
+
+    var signalEvidence = evidenceItems.filter(function (e) {
+      return !e.noise;
+    }).length;
+
+    var noiseEvidence = evidenceItems.filter(function (e) {
+      return e.noise;
+    }).length;
+
+    var hypCount = TB.state.hypotheses ? TB.state.hypotheses.length : 0;
+    var intCount = TB.state.completedInterviews || 0;
+    var reqCount = TB.state.requestsApproved || 0;
+    var ctrlCount = TB.state.controlsSelected ? Object.keys(TB.state.controlsSelected).filter(function (k) {
+      return TB.state.controlsSelected[k];
+    }).length : 0;
+
+    var raw =
+      signalEvidence * 2 +
+      hypCount * 4 +
+      intCount * 5 +
+      reqCount * 6 +
+      ctrlCount * 1 -
+      Math.min(10, noiseEvidence * 2);
+
+    TB.state.progress = Math.max(0, Math.min(100, raw));
+
+    setText('progress-text', TB.state.progress + '%');
+
+    var bar = $('progress-bar');
+    if (bar) bar.style.width = TB.state.progress + '%';
+  }
+
+  TB.updateProgress = updateProgress;
+
+  function refreshAfterEvidenceChange() {
+    if (TB.renderers.documents) TB.renderers.documents();
+    if (TB.renderers.evidence) TB.renderers.evidence();
+    if (TB.renderers.requests) TB.renderers.requests();
+    if (TB.renderers.hypotheses) TB.renderers.hypotheses();
+    if (TB.renderers.graph) TB.renderers.graph();
+    if (TB.updateDocumentFieldStates) TB.updateDocumentFieldStates();
+    if (TB.updateCounters) TB.updateCounters();
+    if (TB.updateProgress) TB.updateProgress();
+  }
+
+  TB.refreshAfterEvidenceChange = refreshAfterEvidenceChange;
+
+  /* =========================
+     RENDER WORKSPACE
+     ========================= */
+
+  if (!TB.renderWorkspace) {
+    TB.renderWorkspace = function () {
+      var keys = Object.keys(TB.renderers);
+
+      keys.forEach(function (key) {
+        if (typeof TB.renderers[key] === 'function') {
+          TB.renderers[key]();
+        }
+      });
+
+      if (TB.updateCounters) TB.updateCounters();
+      if (TB.updateProgress) TB.updateProgress();
+    };
+  }
+
+  /* =========================
+     EVENT DELEGATION
+     ========================= */
+
+  function setupDelegation() {
+    if (TB.delegationBound) return;
+    TB.delegationBound = true;
+
+    document.addEventListener('click', function (event) {
+      var docCard = event.target.closest('.tb-doc-card[data-doc]');
+      if (docCard) {
+        openDocument(docCard.getAttribute('data-doc'));
+        return;
+      }
+
+      var openDocBtn = event.target.closest('[data-open-doc]');
+      if (openDocBtn) {
+        openDocument(openDocBtn.getAttribute('data-open-doc'));
+        return;
+      }
+
+      var evField = event.target.closest('.tb-ev-field[data-ev]');
+      if (evField) {
+        var id = evField.getAttribute('data-ev');
+        var added = addEvidence(id);
+        if (!added) TB.showToast('УЖЕ В ДОКАЗАТЕЛЬСТВАХ');
+        return;
+      }
+
+      var removeBtn = event.target.closest('[data-remove-ev]');
+      if (removeBtn) {
+        removeEvidence(removeBtn.getAttribute('data-remove-ev'));
+        return;
+      }
+    });
+
+    document.addEventListener('change', function (event) {
+      var control = event.target.closest('[data-control]');
+      if (control && TB.state) {
+        TB.state.controlsSelected = TB.state.controlsSelected || {};
+        TB.state.controlsSelected[control.getAttribute('data-control')] = control.checked;
+        if (TB.updateProgress) TB.updateProgress();
+      }
+    });
+  }
+
+  TB.setupDelegation = setupDelegation;
+  setupDelegation();
+
+})();
+
+/* =========================================================
+   M3b2: TRANSACTIONS / OFFICIAL REQUESTS
+   ========================================================= */
+
+(function () {
+  var TB = window.TB_ENGINE;
+
+  if (!TB) return;
+  if (TB.m3b2Loaded) return;
+
+  TB.m3b2Loaded = true;
+
+  TB.renderers = TB.renderers || {};
+
+  /* =========================
+     LOCAL HELPERS
+     ========================= */
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function setText(id, value) {
+    if (TB.setText) return TB.setText(id, value);
+    var el = $(id);
+    if (el) el.textContent = value == null ? '' : String(value);
+  }
+
+  function setHtml(id, value) {
+    if (TB.setHtml) return TB.setHtml(id, value);
+    var el = $(id);
+    if (el) el.innerHTML = value == null ? '' : String(value);
+  }
+
+  function escapeHtml(value) {
+    if (TB.escapeHtml) return TB.escapeHtml(value);
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch];
+    });
+  }
+
+  function parseAmount(value) {
+    var digits = String(value || '').replace(/[^\d]/g, '');
+    return digits ? parseInt(digits, 10) : 0;
+  }
+
+  function parseDays(value) {
+    var match = String(value || '').match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 999;
+  }
+
+  function formatElapsed(seconds) {
+    var total = Math.max(0, seconds || 0);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var s = total % 60;
+
+    return String(h).padStart(2, '0') + ':' +
+           String(m).padStart(2, '0') + ':' +
+           String(s).padStart(2, '0');
+  }
+
+  function getElapsedTime() {
+    if (!TB.state) return 0;
+    return Math.max(0, (TB.state.totalTime || 0) - (TB.state.timeLeft || 0));
+  }
+
+  /* =========================
+     TIME SPENDING
+     ========================= */
+
+  TB.spendTime = function (minutes) {
+    if (!TB.state) return;
+
+    TB.state.timeLeft = Math.max(0, TB.state.timeLeft - (minutes || 0) * 60);
+
+    if (TB.updateTimerDisplay) TB.updateTimerDisplay();
+
+    if (TB.state.timeLeft <= 0) {
+      clearInterval(TB.timerInterval);
+      if (TB.openReportModal) TB.openReportModal();
+      TB.showToast('ВРЕМЯ ВЫШЛО');
+    }
+  };
+
+  /* =========================
+     REQUEST LOG
+     ========================= */
+
+  function addRequestLog(status, text) {
+    if (!TB.state) return;
+
+    TB.state.requestLog = TB.state.requestLog || [];
+
+    TB.state.requestLog.push({
+      status: status,
+      time: formatElapsed(getElapsedTime()),
+      text: text
+    });
+  }
+
+  TB.addRequestLog = addRequestLog;
+
+  /* =========================
+     TRANSACTION RENDERING
+     ========================= */
+
+  function isDuplicateSuspiciousContainer(row) {
+    if (!row || !row.container || row.container === '—') return false;
+
+    var count = 0;
+
+    (TB.data.transactions || []).forEach(function (t) {
+      if (t.grn === 'Нет' && t.container === row.container) {
+        count++;
+      }
+    });
+
+    return count > 1;
+  }
+
+  function isDuplicateSuspiciousTracking(row) {
+    if (!row || !row.tracking || row.tracking === '—') return false;
+
+    var count = 0;
+
+    (TB.data.transactions || []).forEach(function (t) {
+      if (t.grn === 'Нет' && t.tracking === row.tracking) {
+        count++;
+      }
+    });
+
+    return count > 1;
+  }
+
+  function renderTransactions() {
+    if (!TB.data || !TB.data.transactions) return;
+
+    var rows = TB.data.transactions;
+    var searchEl = $('txn-search');
+    var filterEl = $('txn-filter');
+
+    var search = ((searchEl && searchEl.value) || '').toLowerCase();
+    var filter = (filterEl && filterEl.value) || 'all';
+
+    var filtered = rows.filter(function (row) {
+      var haystack = [
+        row.date,
+        row.payee,
+        row.amount,
+        row.invoice,
+        row.container,
+        row.tracking,
+        row.terms,
+        row.grn,
+        row.note
+      ].join(' ').toLowerCase();
+
+      var amount = parseAmount(row.amount);
+      var days = parseDays(row.terms);
+
+      if (search && haystack.indexOf(search) === -1) return false;
+
+      if (filter === 'vendor' && String(row.payee).indexOf('Prime Link') === -1) return false;
+      if (filter === 'large' && amount < 10000000) return false;
+      if (filter === 'fast' && days > 3) return false;
+      if (filter === 'no_grn' && row.grn !== 'Нет') return false;
+
+      return true;
+    });
+
+    var html = '' +
+      '<table class="tb-data-table">' +
+        '<thead>' +
+          '<tr>' +
+            '<th>Дата</th>' +
+            '<th>Получатель</th>' +
+            '<th>Сумма</th>' +
+            '<th>Инвойс</th>' +
+            '<th>Контейнер</th>' +
+            '<th>Трек</th>' +
+            '<th>Срок</th>' +
+            '<th>GRN</th>' +
+            '<th>Действие</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>';
+
+    if (!filtered.length) {
+      html += '<tr><td colspan="9" style="text-align:center;color:#888;padding:24px;">ОПЕРАЦИИ НЕ НАЙДЕНЫ</td></tr>';
+    }
+
+    filtered.forEach(function (row) {
+      html += '' +
+        '<tr>' +
+          '<td>' + escapeHtml(row.date) + '</td>' +
+          '<td><strong>' + escapeHtml(row.payee) + '</strong></td>' +
+          '<td>' + escapeHtml(row.amount) + '</td>' +
+          '<td>' + escapeHtml(row.invoice) + '</td>' +
+          '<td>' + escapeHtml(row.container) + '</td>' +
+          '<td>' + escapeHtml(row.tracking) + '</td>' +
+          '<td>' + escapeHtml(row.terms) + '</td>' +
+          '<td>' + escapeHtml(row.grn) + '</td>' +
+          '<td><button class="tb-btn-mini" type="button" data-txn="' + escapeHtml(row.id) + '">В улики</button></td>' +
+        '</tr>';
+    });
+
+    html += '</tbody></table>';
+
+    setHtml('render-transactions', html);
+  }
+
+  TB.renderers.transactions = renderTransactions;
+  TB.renderTransactions = renderTransactions;
+
+  /* =========================
+     ADD TRANSACTION AS EVIDENCE
+     ========================= */
+
+  function addTransactionEvidence(txnId) {
+    if (!TB.data || !TB.data.transactions || !TB.state) return;
+
+    var row = null;
+
+    for (var i = 0; i < TB.data.transactions.length; i++) {
+      if (TB.data.transactions[i].id === txnId) {
+        row = TB.data.transactions[i];
+        break;
+      }
+    }
+
+    if (!row) return;
+
+    var id = 'txn_' + row.id;
+
+    if (TB.state.evidence[id]) {
+      TB.showToast('ЭТА ОПЕРАЦИЯ УЖЕ В УЛИКАХ');
+      return;
+    }
+
+    var days = parseDays(row.terms);
+    var dupContainer = isDuplicateSuspiciousContainer(row);
+    var dupTracking = isDuplicateSuspiciousTracking(row);
+    var suspicious = row.grn === 'Нет' && days <= 3;
+
+    var reliability = 'low';
+    var weight = 2;
+
+    if (suspicious) {
+      reliability = 'medium';
+      weight = 5;
+    }
+
+    if (suspicious && (dupContainer || dupTracking)) {
+      weight = 8;
+    }
+
+    TB.state.evidence[id] = {
+      id: id,
+      title: 'Платёж: ' + row.payee + ', инвойс ' + row.invoice + ', ' + row.amount,
+      source: 'Журнал платежей',
+      reliability: reliability,
+      weight: weight,
+      tags: ['transaction'],
+      noise: false
+    };
+
+    TB.showToast('ОПЕРАЦИЯ ДОБАВЛЕНА В УЛИКИ');
+
+    if (TB.refreshAfterEvidenceChange) TB.refreshAfterEvidenceChange();
+  }
+
+  TB.addTransactionEvidence = addTransactionEvidence;
+
+  /* =========================
+     REQUEST REQUIREMENTS
+     ========================= */
+
+  function meetsRequestRequirements(req) {
+    if (!req) return false;
+    if (!TB.hasEvidence) return false;
+
+    if (req.requires && req.requires.length) {
+      for (var i = 0; i < req.requires.length; i++) {
+        if (!TB.hasEvidence(req.requires[i])) return false;
+      }
+    }
+
+    if (req.requiresAny && req.requiresAny.length) {
+      var any = false;
+
+      for (var j = 0; j < req.requiresAny.length; j++) {
+        if (TB.hasEvidence(req.requiresAny[j])) {
+          any = true;
+          break;
+        }
+      }
+
+      if (!any) return false;
+    }
+
+    return true;
+  }
+
+  TB.meetsRequestRequirements = meetsRequestRequirements;
+
+  /* =========================
+     RENDER REQUESTS
+     ========================= */
+
+  function getDocTitleById(docId) {
+    if (!TB.data || !TB.data.documents) return docId;
+
+    for (var i = 0; i < TB.data.documents.length; i++) {
+      if (TB.data.documents[i].id === docId) {
+        return TB.data.documents[i].title;
+      }
+    }
+
+    return docId;
+  }
+
+  function renderRequests() {
+    if (!TB.data || !TB.data.requests || !TB.state) return;
+
+    var requests = TB.data.requests;
+    var max = TB.data.maxRequests || 6;
+    var used = TB.state.requestsUsed || 0;
+    var left = Math.max(0, max - used);
+
+    setText('req-used', String(used));
+    setText('req-left', String(left));
+    setText('req-approved', String(TB.state.requestsApproved || 0));
+    setText('req-rejected', String(TB.state.requestsRejected || 0));
+
+    if (TB.updateTopResources) TB.updateTopResources();
+
+    var boardHtml = requests.map(function (req) {
+      var state = TB.state.requests[req.id] || { status: 'idle', attempts: 0 };
+      var approved = state.status === 'approved';
+      var rejected = state.status === 'rejected';
+      var canSend = !approved && left > 0;
+      var requirementsMet = meetsRequestRequirements(req);
+
+      var requiresHtml = (req.requires || []).map(function (evId) {
+        var done = TB.hasEvidence && TB.hasEvidence(evId);
+        var title = TB.ev && TB.ev[evId] ? TB.ev[evId].title : evId;
+        return '<li class="' + (done ? 'done' : '') + '">' + escapeHtml(title) + '</li>';
+      }).join('');
+
+      var requiresAnyHtml = '';
+
+      if (req.requiresAny && req.requiresAny.length) {
+        var anyDone = false;
+
+        req.requiresAny.forEach(function (evId) {
+          if (TB.hasEvidence && TB.hasEvidence(evId)) anyDone = true;
+        });
+
+        requiresAnyHtml =
+          '<div style="margin-top:10px;">' +
+            '<strong style="font-size:12px;color:#666;">Достаточное основание (любое из)</strong>' +
+            '<ul class="tb-checklist">' +
+              req.requiresAny.map(function (evId) {
+                var done = TB.hasEvidence && TB.hasEvidence(evId);
+                var title = TB.ev && TB.ev[evId] ? TB.ev[evId].title : evId;
+                return '<li class="' + (done ? 'done' : '') + '">' + escapeHtml(title) + '</li>';
+              }).join('') +
+            '</ul>' +
+          '</div>';
+      }
+
+      var unlockTitles = (req.unlocks || []).map(function (docId) {
+        return getDocTitleById(docId);
+      }).join(' • ');
+
+      var actionHtml = '';
+
+      if (approved) {
+        actionHtml = '<span class="tb-request-status approved">ОДОБРЕН</span>';
+      } else if (rejected) {
+        actionHtml =
+          '<button class="tb-btn-secondary" type="button" data-request-send="' + escapeHtml(req.id) + '"' +
+          (canSend ? '' : ' disabled') +
+          '>ПОВТОРИТЬ ЗАПРОС</button>';
+      } else {
+        actionHtml =
+          '<button class="tb-btn-secondary" type="button" data-request-send="' + escapeHtml(req.id) + '"' +
+          (canSend ? '' : ' disabled') +
+          '>ОТПРАВИТЬ ЗАПРОС</button>';
+      }
+
+      var unlockedDocsHtml = '';
+
+      if (approved && req.unlocks && req.unlocks.length) {
+        unlockedDocsHtml = req.unlocks.map(function (docId) {
+          return '<button class="tb-btn-mini" type="button" data-open-doc="' + escapeHtml(docId) + '">Открыть: ' + escapeHtml(getDocTitleById(docId)) + '</button>';
+        }).join('');
+      }
+
+      var cardClass = approved
+        ? 'approved'
+        : rejected
+          ? 'rejected'
+          : requirementsMet
+            ? ''
+            : 'locked';
+
+      var statusClass = approved
+        ? 'approved'
+        : rejected
+          ? 'rejected'
+          : requirementsMet
+            ? 'pending'
+            : 'locked';
+
+      var statusText = approved
+        ? 'ОДОБРЕН'
+        : rejected
+          ? 'ОТКЛОНЁН'
+          : requirementsMet
+            ? 'ГОТОВ К ОТПРАВКЕ'
+            : 'НЕТ ОСНОВАНИЯ';
+
+      return '' +
+        '<div class="tb-request-card ' + cardClass + '">' +
+          '<div class="tb-request-head">' +
+            '<div>' +
+              '<div class="tb-request-title">' + escapeHtml(req.title) + '</div>' +
+              '<div class="tb-request-target">' + escapeHtml(req.target) + '</div>' +
+            '</div>' +
+            '<div class="tb-request-status ' + statusClass + '">' + escapeHtml(statusText) + '</div>' +
+          '</div>' +
+
+          '<div class="tb-request-desc">' + escapeHtml(req.desc) + '</div>' +
+
+          '<div class="tb-request-meta">' +
+            '<span>Время: ' + escapeHtml(req.timeCost) + ' мин</span>' +
+            '<span>Открывает: ' + escapeHtml(unlockTitles || '—') + '</span>' +
+          '</div>' +
+
+          '<div>' +
+            '<strong style="font-size:12px;color:#666;">Обязательное основание</strong>' +
+            '<ul class="tb-checklist">' +
+              (requiresHtml || '<li>Не требуется</li>') +
+            '</ul>' +
+            requiresAnyHtml +
+          '</div>' +
+
+          (req.hint ? '<div class="tb-doc-small" style="color:#666;">' + escapeHtml(req.hint) + '</div>' : '') +
+
+          '<div class="tb-request-actions">' +
+            actionHtml +
+            unlockedDocsHtml +
+          '</div>' +
+        '</div>';
+    }).join('');
+
+    setHtml('render-requests', boardHtml);
+
+    var log = TB.state.requestLog || [];
+
+    var logHtml = log.slice().reverse().map(function (entry) {
+      return '' +
+        '<div class="tb-request-log-item ' + escapeHtml(entry.status) + '">' +
+          '<strong>' + escapeHtml(entry.time) + '</strong> · ' + escapeHtml(entry.text) +
+        '</div>';
+    }).join('');
+
+    setHtml('request-log', logHtml || '<div class="tb-request-log-item">Журнал пуст.</div>');
+  }
+
+  TB.renderers.requests = renderRequests;
+  TB.renderRequests = renderRequests;
+
+  /* =========================
+     SEND REQUEST
+     ========================= */
+
+  function sendRequest(requestId) {
+    if (!TB.data || !TB.data.requests || !TB.state) return;
+
+    var req = null;
+
+    for (var i = 0; i < TB.data.requests.length; i++) {
+      if (TB.data.requests[i].id === requestId) {
+        req = TB.data.requests[i];
+        break;
+      }
+    }
+
+    if (!req) return;
+
+    var state = TB.state.requests[requestId];
+
+    if (!state) {
+      state = { status: 'idle', attempts: 0 };
+      TB.state.requests[requestId] = state;
+    }
+
+    if (state.status === 'approved') {
+      TB.showToast('ЗАПРОС УЖЕ ОДОБРЕН');
+      return;
+    }
+
+    var max = TB.data.maxRequests || 6;
+    var used = TB.state.requestsUsed || 0;
+
+    if (!meetsRequestRequirements(req)) {
+      state.status = 'rejected';
+      state.attempts = (state.attempts || 0) + 1;
+
+      TB.state.requestsRejected = (TB.state.requestsRejected || 0) + 1;
+
+      TB.spendTime(10);
+
+      addRequestLog('rejected', 'Запрос отклонён: ' + req.title + '. ' + req.reject);
+
+      TB.showToast('ЗАПРОС ОТКЛОНЁН');
+
+      renderRequests();
+      if (TB.updateTopResources) TB.updateTopResources();
+      if (TB.updateCounters) TB.updateCounters();
+      if (TB.updateProgress) TB.updateProgress();
+
+      return;
+    }
+
+    if (used >= max) {
+      TB.showToast('ЛИМИТ ЗАПРОСОВ ИСЧЕРПАН');
+      return;
+    }
+
+    state.status = 'approved';
+    state.attempts = (state.attempts || 0) + 1;
+
+    TB.state.requestsUsed = (TB.state.requestsUsed || 0) + 1;
+    TB.state.requestsApproved = (TB.state.requestsApproved || 0) + 1;
+
+    TB.spendTime(req.timeCost || 0);
+
+    addRequestLog('approved', 'Запрос одобрен: ' + req.title + '. ' + req.success);
+
+    TB.showToast('ЗАПРОС ОДОБРЕН');
+
+    renderRequests();
+
+    if (TB.renderers.documents) TB.renderers.documents();
+    if (TB.updateDocumentFieldStates) TB.updateDocumentFieldStates();
+    if (TB.updateCounters) TB.updateCounters();
+    if (TB.updateTopResources) TB.updateTopResources();
+    if (TB.updateProgress) TB.updateProgress();
+  }
+
+  TB.sendRequest = sendRequest;
+
+  /* =========================
+     DELEGATION FOR M3b2
+     ========================= */
+
+  document.addEventListener('click', function (event) {
+    var txnBtn = event.target.closest('[data-txn]');
+    if (txnBtn) {
+      addTransactionEvidence(txnBtn.getAttribute('data-txn'));
+      return;
+    }
+
+    var requestBtn = event.target.closest('[data-request-send]');
+    if (requestBtn) {
+      sendRequest(requestBtn.getAttribute('data-request-send'));
+      return;
+    }
+  });
+
+  /* =========================
+     ENSURE WORKSPACE RERENDER INCLUDES NEW PARTS
+     ========================= */
+
+  if (TB.renderWorkspace) {
+    var oldRenderWorkspace = TB.renderWorkspace;
+
+    TB.renderWorkspace = function () {
+      oldRenderWorkspace();
+
+      if (TB.renderers.transactions) TB.renderers.transactions();
+      if (TB.renderers.requests) TB.renderers.requests();
+
+      if (TB.updateCounters) TB.updateCounters();
+      if (TB.updateProgress) TB.updateProgress();
+    };
+  }
+
+})();
+
+/* =========================================================
+   M3c1: INTERVIEWS
+   ========================================================= */
+
+(function () {
+  var TB = window.TB_ENGINE;
+
+  if (!TB) return;
+  if (TB.m3c1Loaded) return;
+
+  TB.m3c1Loaded = true;
+
+  TB.renderers = TB.renderers || {};
+
+  /* =========================
+     LOCAL HELPERS
+     ========================= */
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function setText(id, value) {
+    if (TB.setText) return TB.setText(id, value);
+    var el = $(id);
+    if (el) el.textContent = value == null ? '' : String(value);
+  }
+
+  function setHtml(id, value) {
+    if (TB.setHtml) return TB.setHtml(id, value);
+    var el = $(id);
+    if (el) el.innerHTML = value == null ? '' : String(value);
+  }
+
+  function escapeHtml(value) {
+    if (TB.escapeHtml) return TB.escapeHtml(value);
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch];
+    });
+  }
+
+  var currentInterviewId = null;
+
+  function getMaxInterviews() {
+    return TB.data && TB.data.maxInterviews ? TB.data.maxInterviews : 3;
+  }
+
+  function isModalOpen() {
+    var overlay = $('modal-overlay');
+    return !!(overlay && overlay.classList.contains('open'));
+  }
+
+  function scrollChatToBottom() {
+    var chat = $('interview-chat');
+    if (chat) chat.scrollTop = chat.scrollHeight;
+  }
+
+  /* =========================
+     CHOICE LOCKING
+     ========================= */
+
+  function isChoiceLocked(choice) {
+    if (!choice) return false;
+    if (!TB.hasEvidence) return false;
+
+    if (choice.requiresAny && choice.requiresAny.length) {
+      var any = false;
+
+      for (var i = 0; i < choice.requiresAny.length; i++) {
+        if (TB.hasEvidence(choice.requiresAny[i])) {
+          any = true;
+          break;
+        }
+      }
+
+      return !any;
+    }
+
+    if (choice.requires) {
+      return !TB.hasEvidence(choice.requires);
+    }
+
+    return false;
+  }
+
+  TB.isInterviewChoiceLocked = isChoiceLocked;
+
+  /* =========================
+     RENDER INTERVIEW CARDS
+     ========================= */
+
+  function renderInterviews() {
+    if (!TB.data || !TB.data.interviews || !TB.state) return;
+
+    var max = getMaxInterviews();
+    var ids = Object.keys(TB.data.interviews);
+
+    if (!ids.length) {
+      setHtml('render-interviews', '<div class="tb-empty-state">ИНТЕРВЬЮ НЕ НАСТРОЕНЫ</div>');
+      return;
+    }
+
+    var html = ids.map(function (id) {
+      var iv = TB.data.interviews[id];
+      var st = TB.state.interviewsState[id];
+
+      if (!st) return '';
+
+      var completedClass = st.completed ? 'completed' : '';
+      var buttonText = st.completed ? 'ОТКРЫТЬ ПРОТОКОЛ' : 'НАЧАТЬ ИНТЕРВЬЮ';
+
+      return '' +
+        '<div class="tb-interview-card ' + completedClass + '">' +
+          '<div class="tb-interview-top">' +
+            '<div class="tb-avatar">' + escapeHtml(iv.initials || '??') + '</div>' +
+            '<div>' +
+              '<div class="tb-interview-name">' + escapeHtml(iv.name) + '</div>' +
+              '<div class="tb-interview-role">' + escapeHtml(iv.role) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="tb-interview-desc">' + escapeHtml(iv.desc) + '</div>' +
+          '<button class="tb-btn-secondary" type="button" data-interview="' + escapeHtml(id) + '">' +
+            escapeHtml(buttonText) +
+          '</button>' +
+        '</div>';
+    }).join('');
+
+    setHtml('render-interviews', html);
+    setText('c-int', (TB.state.completedInterviews || 0) + '/' + max);
+  }
+
+  TB.renderers.interviews = renderInterviews;
+  TB.renderInterviews = renderInterviews;
+
+  /* =========================
+     EVIDENCE FROM INTERVIEW NODES
+     ========================= */
+
+  function addInterviewEvidence(ids) {
+    if (!ids || !ids.length || !TB.addEvidence) return;
+
+    ids.forEach(function (id) {
+      TB.addEvidence(id, false);
+    });
+  }
+
+  /* =========================
+     OPEN INTERVIEW
+     ========================= */
+
+  function openInterview(id) {
+    if (!TB.data || !TB.data.interviews || !TB.state) return;
+
+    var iv = TB.data.interviews[id];
+    var st = TB.state.interviewsState[id];
+
+    if (!iv || !st) return;
+
+    if (!st.completed && (TB.state.completedInterviews || 0) >= getMaxInterviews()) {
+      TB.showToast('ДОСТУПНО ТОЛЬКО ' + getMaxInterviews() + ' ИНТЕРВЬЮ');
+      return;
+    }
+
+    if (!st.messages || !st.messages.length) {
+      st.messages = [];
+
+      var startNode = iv.nodes[iv.startNode];
+
+      if (startNode) {
+        st.messages.push({
+          type: 'npc',
+          text: startNode.text
+        });
+
+        addInterviewEvidence(startNode.add);
+      }
+    }
+
+    currentInterviewId = id;
+    renderInterviewModal(id);
+  }
+
+  TB.openInterview = openInterview;
+
+  /* =========================
+     RENDER INTERVIEW MODAL
+     ========================= */
+
+  function renderInterviewModal(id) {
+    if (!TB.data || !TB.data.interviews || !TB.state) return;
+
+    var iv = TB.data.interviews[id];
+    var st = TB.state.interviewsState[id];
+
+    if (!iv || !st) return;
+
+    var node = iv.nodes[st.currentNode];
+
+    var choicesHtml = '';
+
+    if (!st.completed && node && node.choices && node.choices.length) {
+      choicesHtml =
+        '<div class="tb-choices">' +
+          node.choices.map(function (choice, index) {
+            var locked = isChoiceLocked(choice);
+            var lockedClass = locked ? 'locked' : '';
+
+            return '' +
+              '<button class="tb-choice-btn ' + lockedClass + '" type="button" ' +
+                'data-interview-choice="' + escapeHtml(id) + '" ' +
+                'data-choice-index="' + index + '">' +
+                escapeHtml(choice.text) +
+              '</button>';
+          }).join('') +
+        '</div>';
+    } else if (st.completed) {
+      choicesHtml = '<div class="tb-msg success">Интервью завершено. Протокол сохранён.</div>';
+    }
+
+    var messagesHtml = (st.messages || []).map(function (msg) {
+      return '<div class="tb-msg ' + escapeHtml(msg.type) + '">' + escapeHtml(msg.text) + '</div>';
+    }).join('');
+
+    var content = '' +
+      '<div class="tb-interview-header">' +
+        '<div class="tb-avatar">' + escapeHtml(iv.initials || '??') + '</div>' +
+        '<div>' +
+          '<div class="tb-interview-name">' + escapeHtml(iv.name) + '</div>' +
+          '<div class="tb-interview-role">' + escapeHtml(iv.role) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="tb-chat" id="interview-chat">' +
+        messagesHtml +
+      '</div>' +
+      choicesHtml;
+
+    TB.openModal(content);
+
+    setTimeout(scrollChatToBottom, 0);
+  }
+
+  TB.renderInterviewModal = renderInterviewModal;
+
+  /* =========================
+     HANDLE CHOICE
+     ========================= */
+
+  function handleInterviewChoice(id, choiceIndex) {
+    if (!TB.data || !TB.data.interviews || !TB.state) return;
+
+    var iv = TB.data.interviews[id];
+    var st = TB.state.interviewsState[id];
+
+    if (!iv || !st) return;
+
+    var node = iv.nodes[st.currentNode];
+
+    if (!node || !node.choices || !node.choices[choiceIndex]) return;
+
+    var choice = node.choices[choiceIndex];
+
+    if (isChoiceLocked(choice)) {
+      st.messages.push({
+        type: 'system',
+        text: choice.lockedText || 'Недостаточно данных для этого вопроса.'
+      });
+
+      renderInterviewModal(id);
+      return;
+    }
+
+    st.messages.push({
+      type: 'player',
+      text: choice.text
+    });
+
+    if (choice.add) {
+      addInterviewEvidence(choice.add);
+    }
+
+    if (choice.next === 'END') {
+      st.completed = true;
+      TB.state.completedInterviews = (TB.state.completedInterviews || 0) + 1;
+
+      st.messages.push({
+        type: 'system',
+        text: 'Интервью завершено.'
+      });
+
+      renderInterviews();
+
+      if (TB.updateCounters) TB.updateCounters();
+      if (TB.updateProgress) TB.updateProgress();
+
+      renderInterviewModal(id);
+      return;
+    }
+
+    st.currentNode = choice.next;
+
+    var nextNode = iv.nodes[st.currentNode];
+
+    if (nextNode) {
+      st.messages.push({
+        type: 'npc',
+        text: nextNode.text
+      });
+
+      addInterviewEvidence(nextNode.add);
+    }
+
+    renderInterviewModal(id);
+  }
+
+  TB.handleInterviewChoice = handleInterviewChoice;
+
+  /* =========================
+     DELEGATION
+     ========================= */
+
+  document.addEventListener('click', function (event) {
+    var interviewBtn = event.target.closest('[data-interview]');
+    if (interviewBtn) {
+      openInterview(interviewBtn.getAttribute('data-interview'));
+      return;
+    }
+
+    var choiceBtn = event.target.closest('[data-interview-choice]');
+    if (choiceBtn) {
+      var id = choiceBtn.getAttribute('data-interview-choice');
+      var index = parseInt(choiceBtn.getAttribute('data-choice-index'), 10);
+
+      handleInterviewChoice(id, index);
+      return;
+    }
+  });
+
+  /* =========================
+     REFRESH AFTER EVIDENCE CHANGE
+     ========================= */
+
+  if (TB.refreshAfterEvidenceChange) {
+    var oldRefreshAfterEvidenceChange = TB.refreshAfterEvidenceChange;
+
+    TB.refreshAfterEvidenceChange = function () {
+      oldRefreshAfterEvidenceChange();
+
+      renderInterviews();
+
+      if (currentInterviewId && isModalOpen()) {
+        renderInterviewModal(currentInterviewId);
+      }
+    };
+  } else {
+    TB.refreshAfterEvidenceChange = function () {
+      renderInterviews();
+
+      if (currentInterviewId && isModalOpen()) {
+        renderInterviewModal(currentInterviewId);
+      }
+    };
+  }
+
+  /* =========================
+     ENSURE RENDER WORKSPACE INCLUDES INTERVIEWS
+     ========================= */
+
+  if (TB.renderWorkspace) {
+    var oldRenderWorkspace = TB.renderWorkspace;
+
+    TB.renderWorkspace = function () {
+      oldRenderWorkspace();
+      renderInterviews();
+    };
+  }
+
+})();
